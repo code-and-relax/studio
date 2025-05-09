@@ -10,18 +10,27 @@ export const APP_HEADER_CONTENT = '#DOCUMENTS/ACCIONS';
 export const APP_HEADER_DUE_DATE = '#DATA A FER';
 
 // Variants for flexible parsing. All will be converted to uppercase for matching.
-export const HEADER_VARIANTS_TERMINI: string[] = ['#TERMINI', 'TERMINI'];
+export const HEADER_VARIANTS_TERMINI: string[] = [
+    '#TERMINI', 
+    'TERMINI'
+];
 export const HEADER_VARIANTS_CONTENT: string[] = [
   '#DOCUMENTS/ACCIONS', 
   'DOCUMENTS/ACCIONS', 
   '#DOCUMENT/ACCIONS', 
-  'DOCUMENT/ACCIONS', // Plural DOCUMENT, singular ACCIONS
-  'DOCUMENT', // Singular DOCUMENT
-  '#DOCUMENTS/ACCIO', // Plural DOCUMENTS, singular ACCIO (hypothetical but good to cover)
+  'DOCUMENT/ACCIONS',
+  'DOCUMENT', 
+  'ACCIONS', // Added based on user feedback
+  '#DOCUMENTS/ACCIO', 
   'DOCUMENTS/ACCIO',
-  'DOCUMENT/ACCIO', // Singular DOCUMENT, singular ACCIO
+  'DOCUMENT/ACCIO',
+  '#DOCUMENT', // Ensure '#DOCUMENT' is also checked
+  '#ACCIONS', // Ensure '#ACCIONS' is also checked
 ];
-export const HEADER_VARIANTS_DUE_DATE: string[] = ['#DATA A FER', 'DATA A FER'];
+export const HEADER_VARIANTS_DUE_DATE: string[] = [
+    '#DATA A FER', 
+    'DATA A FER'
+];
 
 
 // --- Task Configuration ---
@@ -44,3 +53,4 @@ export const TASK_STATUSES: { value: TaskStatus; label: string; icon: React.Elem
 ];
 
 export const DEFAULT_TASK_STATUS: TaskStatus = "Pendent";
+
