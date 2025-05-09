@@ -11,12 +11,14 @@ import {
 } from '@/config/app-config';
 
 // Helper to parse various date string formats (DD/MM/YY, DD/MM/YYYY, YYYY-MM-DD)
-function parseCustomDateString(dateStr: string): Date | null {
+// Exported for use in TaskCard
+export function parseCustomDateString(dateStr: string | null | undefined): Date | null {
   if (!dateStr || typeof dateStr !== 'string') return null;
 
   const trimmedDateStr = dateStr.trim();
   // Handle common non-date placeholders found in CSVs
-  if (trimmedDateStr.toUpperCase() === '#VALUE!' || trimmedDateStr === '-' || trimmedDateStr === '') return null;
+  if (trimmedDateStr.toUpperCase() === '#VALUE!' || trimmedDateStr === '-' || trimmedDateStr === '' || ["Data no especificada", "Data Desconeguda", "N/A"].includes(trimmedDateStr)) return null;
+
 
   let parsedDate: Date | null = null;
   const referenceDate = new Date(); // For 'yy' parsing context
@@ -65,66 +67,51 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
 
   if (lines.length === 0) return [];
 
-  let terminiIndex = -1;
-  let contentIndex = -1;
-  let dueDateIndex = -1;
-  let primaryHeaderRowIndex = -1; // Row index containing #TERMINI and #DOCUMENTS/ACCIONS
+  let headerRowIndex = -1;
+  let csvHeaders: string[] = [];
 
-  // Scan lines to find column indices for each header and the primary header row
+  // Find the header row that contains all required headers
   for (let i = 0; i < lines.length; i++) {
     const lineContent = lines[i];
-    // Skip effectively empty lines (e.g., just commas or whitespace)
-    if (!lineContent.replace(/,/g, '').trim()) {
-      continue;
-    }
-    const cells = lineContent.split(',').map(cell => String(cell || '').trim().toUpperCase());
+    if (!lineContent.replace(/,/g, '').trim()) continue;
 
-    const currentTerminiInLine = cells.indexOf(APP_HEADER_TERMINI);
-    const currentContentInLine = cells.indexOf(APP_HEADER_CONTENT);
-    const currentDueDateInLine = cells.indexOf(APP_HEADER_DUE_DATE);
-
-    if (terminiIndex === -1 && currentTerminiInLine !== -1) {
-      terminiIndex = currentTerminiInLine;
-    }
-    if (contentIndex === -1 && currentContentInLine !== -1) {
-      contentIndex = currentContentInLine;
-    }
-    if (dueDateIndex === -1 && currentDueDateInLine !== -1) {
-      dueDateIndex = currentDueDateInLine;
-    }
-
-    // Identify the primary header row (contains both #TERMINI and #DOCUMENTS/ACCIONS)
-    // This row determines where data rows begin.
-    if (currentTerminiInLine !== -1 && currentContentInLine !== -1) {
-      primaryHeaderRowIndex = i;
-      // Ensure terminiIndex and contentIndex are from this primary header row
-      terminiIndex = currentTerminiInLine;
-      contentIndex = currentContentInLine;
+    const currentCells = lineContent.split(',').map(cell => String(cell || '').trim().toUpperCase());
+    if (currentCells.includes(APP_HEADER_TERMINI) &&
+        currentCells.includes(APP_HEADER_CONTENT) &&
+        currentCells.includes(APP_HEADER_DUE_DATE)) {
+      headerRowIndex = i;
+      csvHeaders = currentCells;
+      break; 
     }
   }
+  
+  if (headerRowIndex === -1) {
+    throw new Error(`Missing required header row or columns. Ensure CSV contains a row with '${APP_HEADER_TERMINI}', '${APP_HEADER_CONTENT}', and '${APP_HEADER_DUE_DATE}'. All must start with '#'.`);
+  }
+  
+  const terminiIndex = csvHeaders.indexOf(APP_HEADER_TERMINI);
+  const contentIndex = csvHeaders.indexOf(APP_HEADER_CONTENT);
+  const dueDateIndex = csvHeaders.indexOf(APP_HEADER_DUE_DATE);
 
-  // Validate that all required column indices were found
+  // This check is technically redundant if headerRowIndex implies all are found,
+  // but kept for absolute safety or if logic changes.
   const missingHeaders: string[] = [];
   if (terminiIndex === -1) missingHeaders.push(APP_HEADER_TERMINI);
   if (contentIndex === -1) missingHeaders.push(APP_HEADER_CONTENT);
   if (dueDateIndex === -1) missingHeaders.push(APP_HEADER_DUE_DATE);
 
   if (missingHeaders.length > 0) {
-    throw new Error(`Missing required column(s): ${missingHeaders.join(', ')}. Ensure CSV contains columns with these headers (all must start with '#').`);
-  }
-  
-  // Validate that a primary header row (for #TERMINI and #DOCUMENTS/ACCIONS) was found
-  if (primaryHeaderRowIndex === -1) {
-    throw new Error(`Could not find a header row containing both '${APP_HEADER_TERMINI}' and '${APP_HEADER_CONTENT}'. Please ensure these headers are on the same line above the data entries.`);
+    throw new Error(`Critical error: Identified header row but failed to get indices for: ${missingHeaders.join(', ')}. This indicates a bug in parsing logic.`);
   }
   
   const tasks: Partial<Task>[] = [];
-  const dataStartRow = primaryHeaderRowIndex + 1;
+  const dataStartRow = headerRowIndex + 1;
 
   for (let i = dataStartRow; i < lines.length; i++) {
     const line = lines[i];
-    if (!line.replace(/,/g, '').trim()) { // Skip effectively empty lines
-      continue; 
+    // Use a more robust way to check if a line is effectively empty or just commas
+    if (!line.split(',').some(cell => cell.trim() !== '')) { 
+        continue; 
     }
     
     const row = line.split(','); 
@@ -134,7 +121,8 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
         console.warn(`Skipping row ${i + 1}: Not enough columns (${row.length}) to access all required data up to index ${maxIndexRequired}. Line: "${line}"`);
         continue;
     }
-
+    // IMPORTANT: Get raw values directly, do not uppercase them here.
+    // Uppercasing was only for header matching.
     const terminiRaw = String(row[terminiIndex] || '').trim();
     const content = String(row[contentIndex] || '').trim();
     const originalDueDateStr = String(row[dueDateIndex] || '').trim();
@@ -151,16 +139,18 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
         taskDueDateField = parsedDate;
     } else {
         taskDueDateField = originalDueDateStr || "Data no especificada"; 
-        if (originalDueDateStr && originalDueDateStr.toUpperCase() !== "#VALUE!" && !["Data no especificada", "Data Desconeguda", "N/A"].includes(originalDueDateStr)) {
+        if (originalDueDateStr && originalDueDateStr.toUpperCase() !== "#VALUE!" && !["Data no especificada", "Data Desconeguda", "N/A"].includes(originalDueDateStr) && !parseCustomDateString(originalDueDateStr)) {
+           // Log only if it's not a known placeholder and not successfully parsed by parseCustomDateString earlier
            console.warn(`Row ${i + 1}: Invalid or unparseable date in column ${dueDateIndex + 1} (header '${APP_HEADER_DUE_DATE}', value: "${originalDueDateStr}"). Using raw string or placeholder: "${taskDueDateField}". Line: "${line}"`);
         }
     }
+    
 
     tasks.push({
       content,
-      originalDueDate: taskDueDateField,
+      originalDueDate: taskDueDateField, // Store the date object or the original string
       terminiRaw, 
-      adjustedDate: taskDueDateField, // Initially same as original
+      adjustedDate: taskDueDateField, // Initially same as original, no calculation
     });
   }
   return tasks;
@@ -178,12 +168,10 @@ export const createNewTaskObject = (partialTask: Partial<Task>): Task => {
   } else if (typeof partialTask.originalDueDate === 'string') {
     finalOriginalDueDate = partialTask.originalDueDate; 
   } else {
-    // This case should ideally not be hit if parseTaskFile ensures a string or Date
-    console.warn(`Task ${id} received invalid or missing originalDueDate. Defaulting to "Data no especificada". Input was:`, partialTask.originalDueDate);
     finalOriginalDueDate = "Data no especificada"; 
   }
   
-  // adjustedDate should mirror originalDueDate upon creation from CSV
+  // adjustedDate should mirror originalDueDate upon creation from CSV, no calculation.
   finalAdjustedDate = finalOriginalDueDate;
 
 
@@ -192,7 +180,7 @@ export const createNewTaskObject = (partialTask: Partial<Task>): Task => {
     content: partialTask.content || `Nova tasca ${id.substring(0,4)}`,
     terminiRaw: typeof partialTask.terminiRaw === 'string' ? partialTask.terminiRaw : "N/A",
     originalDueDate: finalOriginalDueDate,
-    adjustedDate: finalAdjustedDate, // Set to be same as original, no calculations
+    adjustedDate: finalAdjustedDate, 
     status: partialTask.status || DEFAULT_TASK_STATUS,
     color: partialTask.color || INITIAL_POSTIT_COLOR,
     createdAt: partialTask.createdAt ? ( (partialTask.createdAt instanceof Date && isValid(partialTask.createdAt)) ? partialTask.createdAt : now) : now,
@@ -210,16 +198,14 @@ export const formatDate = (date: Date | string | undefined | null): string => {
   }
   
   if (typeof date === 'string') {
-    // Return known placeholders or original string if not a parsable date representation
     if (["Data no especificada", "Data Desconeguda", "N/A"].includes(date) || date.toUpperCase() === "#VALUE!") {
-        return date; // Return "#VALUE!" as is, or other placeholders
+        return date; 
     }
-    // Attempt to parse if it looks like a date, otherwise return the string
     const parsedDate = parseCustomDateString(date);
     if (parsedDate && isValid(parsedDate)) {
       return format(parsedDate, 'dd/MM/yyyy');
     }
-    return date; // Return original string if not a known placeholder and not parsable
+    return date; 
   }
   
   return 'Data desconeguda'; 
@@ -232,7 +218,6 @@ function escapeCsvCell(cellData: any): string {
   if (cellData instanceof Date && isValid(cellData)) {
     cell = format(cellData, 'dd/MM/yyyy'); 
   } else if (typeof cellData === 'string'){
-    // For #VALUE! or other placeholders, export them as they are.
     cell = cellData; 
   } else {
      cell = String(cellData);
@@ -250,12 +235,11 @@ export const exportTasksToCSV = (tasks: Task[]): string => {
   const rows = tasks.map(task => {
     const termini = escapeCsvCell(task.terminiRaw);
     const content = escapeCsvCell(task.content);
-    // For export, use task.originalDueDate, as this reflects the value from the '#DATA A FER' column.
-    // If it was a string like "#VALUE!", it should be exported as such.
-    // If it was a valid date, formatDate within escapeCsvCell will handle it.
+    // Export 'originalDueDate' as it was imported.
+    // If it's a Date, format it. If string (like #VALUE!), export as is.
     const dueDateExportValue = task.originalDueDate instanceof Date && isValid(task.originalDueDate)
-                         ? format(task.originalDueDate, 'dd/MM/yyyy') // Ensure specific format for dates
-                         : (typeof task.originalDueDate === 'string' ? task.originalDueDate : ''); // Export strings as is
+                         ? format(task.originalDueDate, 'dd/MM/yyyy') 
+                         : (typeof task.originalDueDate === 'string' ? task.originalDueDate : '');
 
     const dueDate = escapeCsvCell(dueDateExportValue); 
     return [termini, content, dueDate].join(',');
@@ -263,4 +247,3 @@ export const exportTasksToCSV = (tasks: Task[]): string => {
 
   return [headerLine, ...rows].join('\n');
 };
-

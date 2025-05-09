@@ -41,9 +41,9 @@ export function TaskBoard({ tasks, onUpdateTask, onDeleteTask, isPrintView = fal
 
   return (
     <div className="w-full no-print">
-      <ScrollArea className="h-[calc(100vh-240px)] pr-4"> {/* Adjusted height slightly */}
+      <ScrollArea className="h-[calc(100vh-240px)] pr-2"> {/* Adjusted pr slightly */}
         <div 
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" // Updated grid classes
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 p-4" // Added p-4 for padding around the grid
         >
           {tasks.map((task) => (
             <TaskCard
@@ -58,4 +58,3 @@ export function TaskBoard({ tasks, onUpdateTask, onDeleteTask, isPrintView = fal
     </div>
   );
 }
-
