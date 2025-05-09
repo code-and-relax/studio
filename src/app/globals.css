@@ -111,24 +111,33 @@ body {
 @layer utilities {
   .print-a4-sheet {
     width: 210mm;
-    height: 297mm;
+    /* height: 297mm; /* Commenting out to allow content to flow over multiple pages if needed */
+    min-height: 297mm; /* Ensure at least one page height */
     margin: auto;
     padding: 10mm;
     box-sizing: border-box;
+    background-color: white; /* Ensure printable background */
   }
 
   .postit-grid-print {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 5mm;
+    page-break-inside: auto; /* Allow the grid to break across pages */
   }
 
   .postit-print {
-    page-break-inside: avoid;
-    border: 1px solid #ccc; /* Light border for cutting */
-    padding: 0.5em;
+    page-break-inside: avoid; /* Avoid breaking a single post-it across pages */
+    border: 1px solid #ccc; /* Light border for cutting guide */
+    padding: 0.5rem; /* Standardized padding (Tailwind p-2 is 0.5rem) */
     overflow: hidden; /* Ensure content fits */
-    box-shadow: none;
+    box-shadow: none; /* No shadows for printing */
+    display: flex; /* For controlling inner content layout */
+    flex-direction: column; /* Stack content vertically */
+    justify-content: space-between; /* Push footer to bottom */
+    min-height: 50mm; /* Minimum height for a rectangular post-it look */
+    height: 100%; /* Fill the grid cell height if rows are auto-sized by content */
+    background-color: var(--card); /* Default, will be overridden by task.color */
   }
 }
 
@@ -137,12 +146,18 @@ body {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     font-family: sans-serif; /* Use a common sans-serif for print */
+    background-color: white !important; /* Ensure body background is white for printing */
+    color: black !important; /* Ensure text is black */
   }
   .no-print {
     display: none !important;
   }
   .print-only {
-    display: block !important;
+    /* This class is a marker for elements intended for print.
+       It should not force a display type like 'block !important'
+       as that overrides specific layout classes like 'postit-grid-print'.
+       If an element with .print-only was display:none for screen,
+       it will become visible here by not being display:none. */
   }
   .print-container {
     margin: 0;
@@ -151,5 +166,15 @@ body {
   }
   main {
     padding: 0 !important; /* Remove padding from main content area for print */
+  }
+  /* Ensure that postit-grid-print maintains its grid display during printing */
+  .postit-grid-print {
+    display: grid !important; /* Explicitly set grid display for printing */
+  }
+
+  /* Ensure post-it colors print correctly if they are set via inline styles */
+  .postit-print {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }

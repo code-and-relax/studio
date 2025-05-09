@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -17,7 +18,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CalendarDays, Edit3, Palette, Trash2, MoreVertical, GripVertical } from 'lucide-react';
+import { CalendarDays, Edit3, Palette, Trash2, MoreVertical, GripVertical, Circle } from 'lucide-react'; // Added Circle icon
 import { formatDate } from '@/lib/task-utils';
 import { POSTIT_COLOR_PALETTE, TASK_STATUSES } from '@/config/app-config';
 import { cn } from '@/lib/utils';
@@ -64,23 +65,14 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
 
   const cardStyle = {
     backgroundColor: task.color,
-    // Ensure text contrast if background is very light or very dark
-    // This is a simple check, more sophisticated contrast logic might be needed for arbitrary colors
     color: task.color && task.color.toLowerCase() > '#aaaaaa' ? 'var(--foreground)' : 'var(--card-foreground)',
   };
   
-  // If color is specifically a theme variable like "hsl(var(--card))"
-  // we rely on CSS to set text color via --card-foreground.
-  // For hex colors, we might need dynamic text color.
-  // For simplicity, we assume postit colors are light and use card-foreground.
-  // If the selected color is dark, text might become hard to read.
-  // A better approach would be to calculate luminance and switch text color.
-
   if (isPrintView) {
     return (
-      <div className="postit-print flex flex-col border p-2 break-inside-avoid h-full" style={cardStyle}>
+      <div className="postit-print break-inside-avoid" style={cardStyle}>
         <p className="text-xs font-semibold mb-1 break-words hyphens-auto">{task.content}</p>
-        <div className="mt-auto text-xs text-muted-foreground" style={{color: task.color > '#aaaaaa' ? 'hsl(var(--muted-foreground))' : 'rgba(0,0,0,0.6)' }}>
+        <div className="mt-auto text-xs" style={{color: task.color && task.color.toLowerCase() > '#aaaaaa' ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)' }}> {/* Adjusted text color for print based on background for better legibility */}
           <p>Data Ajustada: {formatDate(task.adjustedDate)}</p>
           <p>Estat: {TASK_STATUSES.find(s => s.value === task.status)?.label || task.status}</p>
         </div>
@@ -181,14 +173,15 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
             </SelectContent>
           </Select>
         </div>
-        <div className="flex items-center text-muted-foreground" style={{color: task.color > '#aaaaaa' ? 'hsl(var(--muted-foreground))' : 'rgba(0,0,0,0.6)' }}>
+        <div className="flex items-center" style={{color: cardStyle.color === 'var(--foreground)' ? 'hsl(var(--muted-foreground))' : 'rgba(0,0,0,0.6)' }}>
           <CalendarDays className="mr-1 h-3 w-3" />
           Data Ajustada: {formatDate(task.adjustedDate)}
         </div>
-        <div className="text-xs text-muted-foreground" style={{color: task.color > '#aaaaaa' ? 'hsl(var(--muted-foreground))' : 'rgba(0,0,0,0.6)' }}>
+        <div className="text-xs" style={{color: cardStyle.color === 'var(--foreground)' ? 'hsl(var(--muted-foreground))' : 'rgba(0,0,0,0.6)' }}>
           Data Original: {formatDate(task.originalDueDate)} (Termini: {task.terminiDays} dies)
         </div>
       </CardFooter>
     </Card>
   );
 }
+
