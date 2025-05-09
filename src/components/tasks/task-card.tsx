@@ -152,12 +152,16 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
       style={{ backgroundColor: task.color }} 
     >
       <CardHeader className="p-3 flex flex-row items-start justify-between space-y-0">
-        <div className="flex items-center space-x-2" style={{ color: mainTextColor }}>
-          <CurrentStatusIcon className="h-5 w-5" />
-          <span className="text-sm font-medium">
-            {currentStatusConfig?.label || task.status}
-          </span>
-        </div>
+        {!isPrintView && currentStatusConfig && (
+           <div className="flex items-center space-x-2" style={{ color: mainTextColor }}>
+            <CurrentStatusIcon className="h-5 w-5" />
+            <span className="text-sm font-medium">
+              {currentStatusConfig?.label || task.status}
+            </span>
+          </div>
+        )}
+        {isPrintView && <div/>} {/* Placeholder to keep layout consistent if status is hidden */}
+        
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-7 w-7" style={{ color: mainTextColor, borderColor: subtleTextColor }}>
@@ -168,11 +172,13 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
           <DropdownMenuContent
             align="end"
             onFocusOutside={(event) => {
+              // If the color picker is open AND the focus is going to/within the color picker, prevent dropdown close
               if (colorPickerOpen && popoverColorContentRef.current && popoverColorContentRef.current.contains(event.target as Node)) {
                 event.preventDefault();
               }
             }}
             onPointerDownOutside={(event) => {
+              // If the color picker is open AND the pointer down is inside the color picker, prevent dropdown close
               if (colorPickerOpen && popoverColorContentRef.current && popoverColorContentRef.current.contains(event.target as Node)) {
                 event.preventDefault();
               }
@@ -190,8 +196,8 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
               <PopoverTrigger asChild>
                 <DropdownMenuItem
                   onSelect={(e) => {
-                    e.preventDefault();
-                    setColorPickerOpen(true);
+                    e.preventDefault(); // Prevent default item behavior (closing dropdown)
+                    setColorPickerOpen(true); // Open the popover
                   }}
                 >
                   <Palette className="mr-2 h-4 w-4" />
@@ -201,9 +207,9 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
               <PopoverContent 
                 ref={popoverColorContentRef}
                 className="w-auto p-2"
-                onOpenAutoFocus={(e) => e.preventDefault()}
-                side="right"
-                align="start"
+                onOpenAutoFocus={(e) => e.preventDefault()} // Prevent focus hijack
+                side="right" // Suggest popover to open on the right
+                align="start" // Align to the start of the trigger
               >
                 <div className="grid grid-cols-3 gap-2">
                   {POSTIT_COLOR_PALETTE.map((colorOpt) => (
@@ -254,30 +260,32 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
       </CardContent>
 
       <CardFooter className="p-3 text-xs flex flex-col items-start space-y-2 border-t" style={{ borderColor: subtleTextColor, color: subtleTextColor }}>
-        <div className="w-full">
-          <Select value={task.status || DEFAULT_TASK_STATUS} onValueChange={(value: TaskStatus) => handleStatusChange(value)}>
-            <SelectTrigger 
-              className="h-8 text-xs w-full rounded"
-              style={{ 
-                backgroundColor: 'rgba(0,0,0,0.1)', 
-                color: mainTextColor, 
-                borderColor: subtleTextColor 
-              }}
-            >
-              <SelectValue placeholder="Canviar estat" />
-            </SelectTrigger>
-            <SelectContent>
-              {TASK_STATUSES.map(statusOpt => (
-                <SelectItem key={statusOpt.value} value={statusOpt.value} className="text-xs">
-                  <div className="flex items-center">
-                    <statusOpt.icon className="mr-2 h-4 w-4" />
-                    {statusOpt.label}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {!isPrintView && (
+          <div className="w-full">
+            <Select value={task.status || DEFAULT_TASK_STATUS} onValueChange={(value: TaskStatus) => handleStatusChange(value)}>
+              <SelectTrigger 
+                className="h-8 text-xs w-full rounded"
+                style={{ 
+                  backgroundColor: 'rgba(0,0,0,0.1)', 
+                  color: mainTextColor, 
+                  borderColor: subtleTextColor 
+                }}
+              >
+                <SelectValue placeholder="Canviar estat" />
+              </SelectTrigger>
+              <SelectContent>
+                {TASK_STATUSES.map(statusOpt => (
+                  <SelectItem key={statusOpt.value} value={statusOpt.value} className="text-xs">
+                    <div className="flex items-center">
+                      <statusOpt.icon className="mr-2 h-4 w-4" />
+                      {statusOpt.label}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         
         <div className="pt-1 w-full">
             <p className="font-medium text-xs flex items-center mb-0.5" style={{ color: mainTextColor }}>
