@@ -71,11 +71,19 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
   let headerRowIndex = -1;
   const csvHeaders: string[] = [];
 
+  // Search for the header row more flexibly by checking for the presence of all required headers
   for (let i = 0; i < lines.length; i++) {
+    // Split by comma, trim, and uppercase each cell for comparison
     const potentialHeaderLine = lines[i].split(',').map(cell => String(cell || '').trim().toUpperCase());
-    if (potentialHeaderLine.includes(APP_HEADER_TERMINI) && potentialHeaderLine.includes(APP_HEADER_CONTENT) && potentialHeaderLine.includes(APP_HEADER_DUE_DATE)) {
+    
+    // Check if all required headers are present in this line
+    const hasTermini = potentialHeaderLine.includes(APP_HEADER_TERMINI);
+    const hasContent = potentialHeaderLine.includes(APP_HEADER_CONTENT);
+    const hasDueDate = potentialHeaderLine.includes(APP_HEADER_DUE_DATE);
+
+    if (hasTermini && hasContent && hasDueDate) {
       headerRowIndex = i;
-      csvHeaders.push(...potentialHeaderLine);
+      csvHeaders.push(...potentialHeaderLine); // Store the found headers
       break; 
     }
   }
@@ -88,6 +96,8 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
   const contentIndex = csvHeaders.indexOf(APP_HEADER_CONTENT);
   const dueDateIndex = csvHeaders.indexOf(APP_HEADER_DUE_DATE);
 
+  // This check is somewhat redundant if the loop condition for finding headerRowIndex worked,
+  // but good for safety. indexOf would return -1 if any were not found.
   if (terminiIndex === -1 || contentIndex === -1 || dueDateIndex === -1) {
     throw new Error(`One or more required headers ('${APP_HEADER_TERMINI}', '${APP_HEADER_CONTENT}', '${APP_HEADER_DUE_DATE}') not found in the identified header row. Indices: Termini=${terminiIndex}, Content=${contentIndex}, DueDate=${dueDateIndex}. Headers found: ${csvHeaders.join(', ')}`);
   }
@@ -101,6 +111,8 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
       continue; 
     }
     
+    // Basic CSV parsing: split by comma. This doesn't handle commas within quoted fields.
+    // For more robust CSV parsing, a library would be better, but this matches previous implementation.
     const row = line.split(','); 
 
     const maxIndexRequired = Math.max(terminiIndex, contentIndex, dueDateIndex);
@@ -109,25 +121,23 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
         continue;
     }
 
+    // Extract raw string values, trim them.
     const terminiRaw = String(row[terminiIndex] || '').trim();
     const content = String(row[contentIndex] || '').trim();
     const originalDueDateStr = String(row[dueDateIndex] || '').trim();
     
+    // Skip row if all key fields are empty (after trimming)
     if (content === '' && terminiRaw === '' && originalDueDateStr === '') {
-      console.warn(`Skipping row ${i+1} as it appears to be empty or irrelevant based on key fields.`);
+      // console.warn(`Skipping row ${i+1} as it appears to be empty or irrelevant based on key fields.`);
       continue;
     }
 
+    // Content is mandatory
     if (content === '') {
         console.warn(`Skipping row ${i + 1} due to missing content in column ${contentIndex + 1} (header '${APP_HEADER_CONTENT}'). Line: "${line}"`);
         continue;
     }
     
-    // Termini can be empty, will default to N/A in createNewTaskObject if so.
-    // if (terminiRaw === '') {
-    //     console.warn(`Row ${i + 1} has missing termini in column ${terminiIndex + 1} (header '${APP_HEADER_TERMINI}'). Will use 'N/A'. Line: "${line}"`);
-    // }
-
     let taskDueDateField: Date | string;
     const parsedDate = parseCustomDateString(originalDueDateStr);
 
@@ -135,14 +145,16 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
         taskDueDateField = parsedDate;
     } else {
         taskDueDateField = originalDueDateStr || "Data no especificada"; // Store original string or placeholder
-        console.warn(`Row ${i + 1}: Invalid or missing date in column ${dueDateIndex + 1} (header '${APP_HEADER_DUE_DATE}', value: "${originalDueDateStr}"). Using raw string or placeholder: "${taskDueDateField}". Line: "${line}"`);
+        if (originalDueDateStr && originalDueDateStr.toUpperCase() !== "#VALUE!") { // Don't warn for expected #VALUE!
+           console.warn(`Row ${i + 1}: Invalid or missing date in column ${dueDateIndex + 1} (header '${APP_HEADER_DUE_DATE}', value: "${originalDueDateStr}"). Using raw string or placeholder: "${taskDueDateField}". Line: "${line}"`);
+        }
     }
 
     tasks.push({
       content,
       originalDueDate: taskDueDateField,
-      terminiRaw, 
-      adjustedDate: taskDueDateField, // Initialize adjustedDate with the same value (Date or string)
+      terminiRaw, // This is the raw string from the CSV cell
+      adjustedDate: taskDueDateField, 
     });
   }
   return tasks;
@@ -161,31 +173,28 @@ export const createNewTaskObject = (partialTask: Partial<Task>): Task => {
       ? partialTask.adjustedDate 
       : finalOriginalDueDate;
   } else if (typeof partialTask.originalDueDate === 'string') {
-    finalOriginalDueDate = partialTask.originalDueDate; // Keep the string (e.g., "#VALUE!", "Data no especificada")
+    finalOriginalDueDate = partialTask.originalDueDate; 
     finalAdjustedDate = (typeof partialTask.adjustedDate === 'string')
       ? partialTask.adjustedDate
-      : finalOriginalDueDate;
+      : (partialTask.adjustedDate instanceof Date && isValid(partialTask.adjustedDate) ? partialTask.adjustedDate : finalOriginalDueDate);
   } else {
-    // Fallback if originalDueDate is undefined, null, or an invalid Date object not caught as string
     console.warn(`Task ${id} received invalid or missing originalDueDate. Defaulting to "Data no especificada". Input was:`, partialTask.originalDueDate);
     finalOriginalDueDate = "Data no especificada"; 
     finalAdjustedDate = "Data no especificada";
   }
   
-  // Ensure consistency: if original is string, adjusted should also be string unless explicitly a valid date.
-  // This case is less likely given the flow from parseTaskFile.
   if (typeof finalOriginalDueDate === 'string' && finalAdjustedDate instanceof Date && isValid(finalAdjustedDate)) {
-      // This implies adjustedDate was explicitly set to a valid Date even if original was a string.
-      // This is generally okay, allowing user to fix an invalid date.
-  } else if (typeof finalOriginalDueDate === 'string' && !(typeof finalAdjustedDate === 'string')) {
-      finalAdjustedDate = finalOriginalDueDate; // ensure adjusted is also string if original is
+    // Okay: original was string placeholder, adjusted is a valid date.
+  } else if (typeof finalOriginalDueDate === 'string' && typeof finalAdjustedDate !== 'string') {
+      finalAdjustedDate = finalOriginalDueDate; 
   }
 
 
   return {
     id: id,
     content: partialTask.content || `Nova tasca ${id.substring(0,4)}`,
-    terminiRaw: partialTask.terminiRaw || "N/A",
+    // Preserve terminiRaw as is if it's a string (even empty), otherwise default to "N/A"
+    terminiRaw: typeof partialTask.terminiRaw === 'string' ? partialTask.terminiRaw : "N/A",
     originalDueDate: finalOriginalDueDate,
     adjustedDate: finalAdjustedDate,
     status: partialTask.status || DEFAULT_TASK_STATUS,
@@ -205,21 +214,21 @@ export const formatDate = (date: Date | string | undefined | null): string => {
   }
   
   if (typeof date === 'string') {
-    // If it's one of our placeholder strings, return it as is or a formatted version
-    if (date === "Data no especificada" || date === "Data Desconeguda") return date;
+    if (["Data no especificada", "Data Desconeguda", "N/A"].includes(date)) return date;
     if (date.toUpperCase() === "#VALUE!") return "Data invàlida (#VALUE!)";
-    if (date === "N/A") return "N/A";
 
-    // Try to parse it as a date string
     const parsedDate = parseCustomDateString(date);
     if (parsedDate && isValid(parsedDate)) {
       return format(parsedDate, 'dd/MM/yyyy');
     }
-    // If it's a string but not a known placeholder and not parsable, indicate it's an invalid date string
-    return `Invàlid: ${date.substring(0,15)}${date.length > 15 ? '...' : ''}`;
+    // If it's a string but not a known placeholder and not parsable, return the string itself,
+    // as it might be a descriptive text rather than an attempt at a date.
+    // However, for very long strings, we might still want to truncate for display if it's clearly not a date.
+    // For now, returning as is, as per "tal cual" for non-date strings.
+    return date; 
   }
   
-  return 'Data desconeguda'; // Fallback for other types or null/undefined not caught
+  return 'Data desconeguda'; 
 };
 
 function escapeCsvCell(cellData: any): string {
@@ -227,9 +236,9 @@ function escapeCsvCell(cellData: any): string {
   
   let cell = '';
   if (cellData instanceof Date && isValid(cellData)) {
-    cell = formatDate(cellData); // Use our consistent dd/MM/yyyy format
+    cell = format(cellData, 'dd/MM/yyyy'); // Use 'dd/MM/yyyy' for CSV export of dates
   } else if (typeof cellData === 'string'){
-    cell = cellData; // Keep string as is (e.g. "Data no especificada")
+    cell = cellData; 
   } else {
      cell = String(cellData);
   }
@@ -241,17 +250,23 @@ function escapeCsvCell(cellData: any): string {
 }
 
 export const exportTasksToCSV = (tasks: Task[]): string => {
-  const headers = [APP_HEADER_TERMINI, APP_HEADER_CONTENT, APP_HEADER_DUE_DATE].join(',');
+  // Define headers exactly as expected by the import function for consistency
+  const headerLine = [APP_HEADER_TERMINI, APP_HEADER_CONTENT, APP_HEADER_DUE_DATE].join(',');
   
   const rows = tasks.map(task => {
     const termini = escapeCsvCell(task.terminiRaw);
     const content = escapeCsvCell(task.content);
-    // For CSV export, use adjustedDate as it reflects user modifications.
-    // It can be Date or string.
-    const dueDate = escapeCsvCell(task.adjustedDate); 
+    // When exporting, originalDueDate might be what the user expects if they re-import.
+    // However, adjustedDate reflects changes. Let's use adjustedDate for export
+    // as it reflects the current state of the task's date.
+    // formatDate will handle Date objects and string placeholders correctly.
+    const dueDateValue = task.adjustedDate instanceof Date && isValid(task.adjustedDate)
+                         ? format(task.adjustedDate, 'dd/MM/yyyy')
+                         : (typeof task.adjustedDate === 'string' ? task.adjustedDate : '');
+
+    const dueDate = escapeCsvCell(dueDateValue); 
     return [termini, content, dueDate].join(',');
   });
 
-  return [headers, ...rows].join('\n');
+  return [headerLine, ...rows].join('\n');
 };
-

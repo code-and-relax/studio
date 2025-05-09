@@ -9,7 +9,7 @@ import { SearchInput } from '@/components/controls/search-input';
 import { TaskBoard } from '@/components/tasks/task-board';
 import { useToast } from "@/hooks/use-toast";
 import { exportTasksToCSV } from '@/lib/task-utils';
-import { isValid } from 'date-fns'; // Import isValid from date-fns
+import { isValid } from 'date-fns'; 
 
 const TASKS_STORAGE_KEY = 'academiaBoardTasks';
 
@@ -28,34 +28,30 @@ export default function AcademiaBoardPage() {
           const parsedRawTasks = JSON.parse(storedTasks);
           
           const mapStoredDate = (dateField: any): Date | string => {
-            if (!dateField) return new Date(); // Default or placeholder
+            if (!dateField) return "Data no especificada"; 
             
-            // Attempt to parse as Date
             const d = new Date(dateField);
             
-            // Check if it's a valid date AND the original string wasn't something like "#VALUE!" or our placeholders
-            // that new Date() might interpret as a valid but incorrect date (e.g., new Date("#VALUE!") can be Jan 1 1970 sometimes).
-            // A simple heuristic: if it's a long numeric string, it might be a timestamp.
-            // If it's an ISO string, new Date() is usually good.
-            // If it's one of our specific non-date strings, keep it.
             if (typeof dateField === 'string' && ["Data no especificada", "Data Desconeguda", "N/A"].includes(dateField) || dateField.toUpperCase?.() === "#VALUE!") {
               return dateField;
             }
 
-            if (isValid(d)) { // isValid from date-fns
-              // Additional check: if the original string was purely numeric and short, it might be a misinterpretation.
-              // For now, isValid should be a good primary check.
+            if (isValid(d)) { 
               return d;
             }
-            return String(dateField); // Keep as string if not a valid date representation
+            return String(dateField); 
           };
 
           const mappedTasks = parsedRawTasks.map((task: any) => ({
             ...task,
-            terminiRaw: task.terminiRaw || "N/A",
+            // Preserve terminiRaw as string (even empty), default to "N/A" only if undefined/null
+            terminiRaw: typeof task.terminiRaw === 'string' ? task.terminiRaw : "N/A",
             originalDueDate: mapStoredDate(task.originalDueDate),
             adjustedDate: mapStoredDate(task.adjustedDate),
             createdAt: mapStoredDate(task.createdAt),
+            // Ensure status and color have defaults if missing from older stored data
+            status: task.status || 'Pendent', 
+            color: task.color || '#E9F5E8' 
           }));
           setTasks(mappedTasks);
         } catch (error) {
@@ -84,6 +80,10 @@ export default function AcademiaBoardPage() {
 
   const handleTasksImported = (newTasks: Task[]) => {
     setTasks(prevTasks => [...prevTasks, ...newTasks]);
+    toast({
+      title: "Tasques afegides",
+      description: `${newTasks.length} tasques importades i afegides a les existents.`,
+    });
   };
 
   const handleTasksReplaced = (newTasks: Task[]) => {
@@ -105,7 +105,7 @@ export default function AcademiaBoardPage() {
     }
     try {
       const csvData = exportTasksToCSV(tasks);
-      const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' }); // \uFEFF for UTF-8 BOM
+      const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' }); 
       const link = document.createElement('a');
       if (link.download !== undefined) {
         const url = URL.createObjectURL(blob);
@@ -152,6 +152,7 @@ export default function AcademiaBoardPage() {
       const printWindow = window.open('/print', '_blank');
       if (printWindow) {
         printWindow.onload = () => {
+          // A short delay can help ensure all content and styles are loaded
           setTimeout(() => {
             try {
               printWindow.print();
@@ -159,7 +160,7 @@ export default function AcademiaBoardPage() {
               console.error("Error calling printWindow.print():", e);
               toast({ variant: 'destructive', title: "Error d'impressió", description: "No s'ha pogut iniciar la impressió." });
             }
-          }, 1000); 
+          }, 500); // Reduced delay, test for optimal timing
         };
       } else {
         toast({ variant: 'destructive', title: "Error d'impressió", description: "No s'ha pogut obrir la finestra d'impressió. Comprova els permisos del navegador." });
@@ -215,4 +216,3 @@ export default function AcademiaBoardPage() {
     </div>
   );
 }
-

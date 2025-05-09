@@ -68,23 +68,10 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
     color: parseInt(task.color.substring(1), 16) > 0xffffff / 2 ? 'hsl(var(--card-foreground))' : '#ffffff',
   };
   
-  const textColorStyle = {
-    color: cardStyle.color, // Text color is determined by cardStyle.color directly now
-  };
-  
-  // Muted text should be a less prominent version of the main text color
-  const mutedTextColorStyle = {
-     color: cardStyle.color === '#ffffff' ? 'rgba(255, 255, 255, 0.7)' : 'hsla(var(--card-foreground-hsl-values), 0.7)',
-  };
-  // If --card-foreground is '0 0% 3.9%', then hsla(0, 0%, 3.9%, 0.7)
-  // This needs actual HSL values for --card-foreground if it's not white.
-  // For simplicity, if card text is dark, make muted text a lighter dark. If card text is white, make it semi-transparent white.
-   if (cardStyle.color !== '#ffffff') { // if text is dark (i.e. card-foreground)
-     mutedTextColorStyle.color = `hsl(var(--card-foreground-h) var(--card-foreground-s) calc(var(--card-foreground-l) + 20%))`; // A bit lighter
-     // A better approach would be to define --muted-on-card-color variable or derive from --card-foreground properly.
-     // Fallback if CSS variables are not readily available in JS for HSL components:
-     mutedTextColorStyle.color = 'rgba(0,0,0,0.5)'; // Assuming dark text is generally black/dark gray
-   }
+  const mainTextColor = cardStyle.color;
+  const subtleTextColor = parseInt(task.color.substring(1), 16) > 0xffffff / 1.5 
+    ? 'rgba(0, 0, 0, 0.65)'
+    : 'rgba(255, 255, 255, 0.75)';
 
 
   if (isPrintView) {
@@ -105,26 +92,20 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
         <div className="mt-auto text-[10px] space-y-0.5" style={{ color: printMutedColor }}>
           <p><span className="font-medium" style={{color: printCardStyle.color}}>Condició Termini:</span> {task.terminiRaw}</p>
           <p><span className="font-medium" style={{color: printCardStyle.color}}>Data Límit:</span> {formatDate(task.adjustedDate)}</p>
-          <p><span className="font-medium" style={{color: printCardStyle.color}}>Estat:</span> {TASK_STATUSES.find(s => s.value === task.status)?.label || task.status}</p>
+          {/* Status removed from print view as per request */}
+          {/* <p><span className="font-medium" style={{color: printCardStyle.color}}>Estat:</span> {TASK_STATUSES.find(s => s.value === task.status)?.label || task.status}</p> */}
         </div>
       </div>
     );
   }
   
-  // Re-evaluate text color for better readability on various post-it colors
-  const mainTextColor = cardStyle.color; // This is already calculated based on contrast
-  const subtleTextColor = parseInt(task.color.substring(1), 16) > 0xffffff / 1.5 
-    ? 'rgba(0, 0, 0, 0.65)'  // For light backgrounds, use a slightly faded black
-    : 'rgba(255, 255, 255, 0.75)'; // For dark backgrounds, use a slightly faded white
-
-
   return (
     <Card
       className={cn(
         "flex flex-col shadow-xl hover:shadow-2xl transition-all duration-300 ease-in-out break-inside-avoid-column transform hover:scale-[1.02] rounded-lg",
         isEditing ? "ring-2 ring-primary ring-offset-2" : ""
       )}
-      style={{ backgroundColor: task.color }} // Card background
+      style={{ backgroundColor: task.color }} 
     >
       <CardHeader className="p-3 flex flex-row items-start justify-between space-y-0">
         <div className="flex items-center space-x-2" style={{ color: mainTextColor }}>
@@ -200,7 +181,7 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
             <SelectTrigger 
               className="h-8 text-xs w-full rounded" 
               style={{ 
-                backgroundColor: 'rgba(0,0,0,0.1)', // Darker overlay for select trigger for better contrast
+                backgroundColor: 'rgba(0,0,0,0.1)', 
                 color: mainTextColor, 
                 borderColor: subtleTextColor 
               }}
