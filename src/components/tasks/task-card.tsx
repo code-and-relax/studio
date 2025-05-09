@@ -16,9 +16,9 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarDays, Edit3, Palette, Trash2, MoreVertical, Info, Save } from 'lucide-react';
+import { CalendarDays, Edit3, Palette, Trash2, MoreVertical, Info, Save, CheckCircle2, Circle, Loader2, Archive } from 'lucide-react';
 import { formatDate, parseCustomDateString } from '@/lib/task-utils';
-import { POSTIT_COLOR_PALETTE, TASK_STATUSES } from '@/config/app-config';
+import { POSTIT_COLOR_PALETTE, TASK_STATUSES, DEFAULT_TASK_STATUS } from '@/config/app-config';
 import { cn } from '@/lib/utils';
 import { isValid } from 'date-fns';
 
@@ -39,6 +39,8 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
   const terminiTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [popoverCalendarOpen, setPopoverCalendarOpen] = useState(false);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+
 
   // Derived state for calendar: ensure it's a Date object or undefined
   const getCalendarSelectedDate = (): Date | undefined => {
@@ -99,43 +101,53 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
 
   const handleColorChange = (color: string) => {
     onUpdateTask(task.id, { color });
+    setColorPickerOpen(false); // Close popover after color selection
   };
 
   const handleStatusChange = (status: TaskStatus) => {
     onUpdateTask(task.id, { status });
   };
+  
+  const currentStatusConfig = TASK_STATUSES.find(s => s.value === (task.status || DEFAULT_TASK_STATUS));
+  const CurrentStatusIcon = currentStatusConfig?.icon || Circle;
 
-  const CurrentStatusIcon = TASK_STATUSES.find(s => s.value === task.status)?.icon || TASK_STATUSES[0].icon;
 
   const cardStyle = {
     backgroundColor: task.color,
+    // Basic contrast check: if color is light, use dark text, else use white text.
+    // This is a simplification. True WCAG contrast calculation is more complex.
     color: parseInt(task.color.substring(1), 16) > 0xffffff / 2 ? 'hsl(var(--card-foreground))' : '#ffffff',
   };
 
   const mainTextColor = cardStyle.color;
-  const subtleTextColor = parseInt(task.color.substring(1), 16) > 0xffffff / 1.5
-    ? 'rgba(0, 0, 0, 0.65)'
-    : 'rgba(255, 255, 255, 0.75)';
+  // A more nuanced subtle text color based on background lightness.
+  // If background is very light (e.g., close to white), use a darker subtle text.
+  // If background is darker, use a lighter subtle text.
+  const subtleTextColor = parseInt(task.color.substring(1), 16) > 0xffffff / 1.5 
+    ? 'rgba(0, 0, 0, 0.65)' // For light backgrounds like yellow, light green
+    : 'rgba(255, 255, 255, 0.75)'; // For darker backgrounds
 
 
   if (isPrintView) {
     const printCardStyle = {
       backgroundColor: task.color,
-      color: parseInt(task.color.substring(1), 16) > 0xffffff / 1.5 ? 'black' : 'white',
-      border: '1px solid #ddd',
+      color: parseInt(task.color.substring(1), 16) > 0xffffff / 1.5 ? 'black' : 'white', // Simplified contrast for print
+      border: '1px solid #ddd', // Ensure border for cutting
     };
+    // Muted text color for print, ensuring readability
     const printMutedColor = parseInt(task.color.substring(1), 16) > 0xffffff / 1.5 ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)';
 
     return (
       <div className="postit-print break-inside-avoid flex flex-col justify-between" style={printCardStyle}>
-        <div>
+        <div> {/* Content Section */}
           <h3 className="text-sm font-semibold mb-1.5 break-words hyphens-auto leading-tight" style={{ color: printCardStyle.color }}>
             {task.content}
           </h3>
         </div>
-        <div className="mt-auto text-[10px] space-y-0.5" style={{ color: printMutedColor }}>
+        <div className="mt-auto text-[10px] space-y-0.5" style={{ color: printMutedColor }}> {/* Footer Section */}
           <p><span className="font-medium" style={{ color: printCardStyle.color }}>Condició Termini:</span> {task.terminiRaw || "N/A"}</p>
           <p><span className="font-medium" style={{ color: printCardStyle.color }}>Data Límit:</span> {formatDate(task.adjustedDate)}</p>
+          {/* Status is intentionally omitted for print view as per user request */}
         </div>
       </div>
     );
@@ -145,20 +157,20 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
     <Card
       className={cn(
         "flex flex-col shadow-xl hover:shadow-2xl transition-all duration-300 ease-in-out break-inside-avoid-column transform hover:scale-[1.02] rounded-lg",
-        (isEditingContent || isEditingTermini) ? "ring-2 ring-primary ring-offset-2" : ""
+        (isEditingContent || isEditingTermini) ? "ring-2 ring-primary ring-offset-2" : "" // visual cue for active editing
       )}
-      style={{ backgroundColor: task.color }}
+      style={{ backgroundColor: task.color }} // Dynamic background color
     >
       <CardHeader className="p-3 flex flex-row items-start justify-between space-y-0">
         <div className="flex items-center space-x-2" style={{ color: mainTextColor }}>
           <CurrentStatusIcon className="h-5 w-5" />
           <span className="text-sm font-medium">
-            {TASK_STATUSES.find(s => s.value === task.status)?.label || task.status}
+            {currentStatusConfig?.label || task.status}
           </span>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7" style={{ color: mainTextColor, borderColor: subtleTextColor }}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" style={{ color: mainTextColor, borderColor: subtleTextColor /* if button has border */ }}>
               <MoreVertical className="h-4 w-4" />
               <span className="sr-only">Opcions</span>
             </Button>
@@ -168,18 +180,26 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
               <Edit3 className="mr-2 h-4 w-4" />
               Editar Contingut
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setIsEditingTermini(true)}>
+             <DropdownMenuItem onSelect={() => setIsEditingTermini(true)}>
               <Edit3 className="mr-2 h-4 w-4" />
               Editar Condició Termini
             </DropdownMenuItem>
-            <Popover>
+            <Popover open={colorPickerOpen} onOpenChange={setColorPickerOpen}>
               <PopoverTrigger asChild>
-                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setColorPickerOpen(true);
+                  }}
+                >
                   <Palette className="mr-2 h-4 w-4" />
                   Canviar Color
                 </DropdownMenuItem>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-2">
+              <PopoverContent 
+                className="w-auto p-2"
+                onOpenAutoFocus={(e) => e.preventDefault()} // Prevents focus shift issues
+              >
                 <div className="grid grid-cols-3 gap-2">
                   {POSTIT_COLOR_PALETTE.map((colorOpt) => (
                     <Button
@@ -211,14 +231,14 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
               ref={contentTextareaRef}
               value={editedContent}
               onChange={(e) => setEditedContent(e.target.value)}
-              onBlur={handleSaveContent}
+              onBlur={handleSaveContent} // Save on blur
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveContent(); } else if (e.key === 'Escape') { setIsEditingContent(false); setEditedContent(task.content); } }}
               className="w-full h-full min-h-[80px] resize-none bg-transparent border-white/30 focus:border-primary rounded-md placeholder:text-white/50"
               style={{ color: mainTextColor }}
               placeholder="Escriu el contingut..."
             />
-            <Button size="sm" variant="ghost" onClick={handleSaveContent} className="absolute bottom-1 right-1" style={{color: mainTextColor}}>
-              <Save size={16} />
+             <Button size="sm" variant="ghost" onClick={handleSaveContent} className="absolute bottom-1 right-1" style={{color: mainTextColor}}>
+              <Save size={16}/>
             </Button>
           </div>
         ) : (
@@ -229,14 +249,15 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
       </CardContent>
 
       <CardFooter className="p-3 text-xs flex flex-col items-start space-y-2 border-t" style={{ borderColor: subtleTextColor, color: subtleTextColor }}>
+        {/* Status Selector */}
         <div className="w-full">
-          <Select value={task.status} onValueChange={(value: TaskStatus) => handleStatusChange(value)}>
-            <SelectTrigger
+          <Select value={task.status || DEFAULT_TASK_STATUS} onValueChange={(value: TaskStatus) => handleStatusChange(value)}>
+            <SelectTrigger 
               className="h-8 text-xs w-full rounded"
-              style={{
-                backgroundColor: 'rgba(0,0,0,0.1)',
-                color: mainTextColor,
-                borderColor: subtleTextColor
+              style={{ 
+                backgroundColor: 'rgba(0,0,0,0.1)', // Slight dark overlay for readability
+                color: mainTextColor, // Ensure text is readable
+                borderColor: subtleTextColor // Use subtle border
               }}
             >
               <SelectValue placeholder="Canviar estat" />
@@ -253,32 +274,35 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
             </SelectContent>
           </Select>
         </div>
-
+        
+        {/* Termini Raw Display & Edit */}
         <div className="pt-1 w-full">
-          <p className="font-medium text-xs flex items-center mb-0.5" style={{ color: mainTextColor }}>
-            <Info size={14} className="mr-1.5 shrink-0" /> Condició Termini:
-          </p>
-          {isEditingTermini ? (
-            <div className="relative">
-              <Textarea
-                ref={terminiTextareaRef}
-                value={editedTerminiRaw}
-                onChange={(e) => setEditedTerminiRaw(e.target.value)}
-                onBlur={handleSaveTermini}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveTermini(); } else if (e.key === 'Escape') { setIsEditingTermini(false); setEditedTerminiRaw(task.terminiRaw); } }}
-                className="w-full text-xs min-h-[40px] resize-none bg-transparent border-white/30 focus:border-primary rounded-md placeholder:text-white/50"
-                style={{ color: mainTextColor }}
-                placeholder="Escriu la condició del termini..."
-              />
-              <Button size="sm" variant="ghost" onClick={handleSaveTermini} className="absolute bottom-0 right-0" style={{color: mainTextColor}}>
-                 <Save size={14} />
-              </Button>
-            </div>
-          ) : (
-            <p className="pl-[22px] text-[11px] leading-tight break-words cursor-pointer" onClick={() => setIsEditingTermini(true)} style={{ color: mainTextColor }}>{task.terminiRaw || "N/A"}</p>
-          )}
+            <p className="font-medium text-xs flex items-center mb-0.5" style={{ color: mainTextColor }}>
+                <Info size={14} className="mr-1.5 shrink-0" /> Condició Termini:
+            </p>
+            {isEditingTermini ? (
+              <div className="relative">
+                <Textarea
+                    ref={terminiTextareaRef}
+                    value={editedTerminiRaw}
+                    onChange={(e) => setEditedTerminiRaw(e.target.value)}
+                    onBlur={handleSaveTermini}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveTermini(); } else if (e.key === 'Escape') { setIsEditingTermini(false); setEditedTerminiRaw(task.terminiRaw);}}}
+                    className="w-full text-xs min-h-[40px] resize-none bg-transparent border-white/30 focus:border-primary rounded-md placeholder:text-white/50"
+                    style={{ color: mainTextColor }}
+                    placeholder="Escriu la condició del termini..."
+                />
+                 <Button size="sm" variant="ghost" onClick={handleSaveTermini} className="absolute bottom-0 right-0" style={{color: mainTextColor}}>
+                   <Save size={14}/>
+                 </Button>
+              </div>
+            ) : (
+                <p className="pl-[22px] text-[11px] leading-tight break-words cursor-pointer" onClick={() => setIsEditingTermini(true)} style={{ color: mainTextColor }}>{task.terminiRaw || "N/A"}</p>
+            )}
         </div>
 
+
+        {/* Adjusted Date Display & Edit */}
         <div className="flex items-center text-xs pt-1 w-full justify-between" style={{ color: mainTextColor }}>
           <div className="flex items-center">
             <CalendarDays className="mr-1.5 h-3.5 w-3.5 shrink-0" />
@@ -287,7 +311,7 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
           <Popover open={popoverCalendarOpen} onOpenChange={setPopoverCalendarOpen}>
             <PopoverTrigger asChild>
               <Button variant="ghost" size="icon" className="h-6 w-6" style={{ color: mainTextColor }}>
-                <Edit3 size={14} />
+                <Edit3 size={14}/>
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0">
@@ -301,6 +325,7 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
           </Popover>
         </div>
 
+        {/* Creation Date - less prominent */}
         <div className="text-[10px] opacity-80 pt-1" style={{ color: subtleTextColor }}>
           Creat: {formatDate(task.createdAt)}
         </div>
@@ -308,3 +333,4 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
     </Card>
   );
 }
+
