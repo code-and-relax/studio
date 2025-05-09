@@ -2,9 +2,9 @@ import type { TaskStatus } from '@/types';
 import { Circle, CheckCircle2, Loader2, Archive } from 'lucide-react';
 
 // --- XLSX Configuration ---
-export const XLSX_COLUMN_TERMINI = 'TERMINI';
-export const XLSX_COLUMN_CONTENT = 'DOCUMENTS/ACCIONS';
-export const XLSX_COLUMN_DUE_DATE = 'DATA A FER';
+export const XLSX_COLUMN_TERMINI = '#TERMINI';
+export const XLSX_COLUMN_CONTENT = '#DOCUMENTS/ACCIONS';
+export const XLSX_COLUMN_DUE_DATE = '#DATA A FER';
 
 // --- Task Configuration ---
 export const INITIAL_POSTIT_COLOR = "#E9F5E8"; // A slightly different soft green from theme for explicit setting. Theme --card is hsl(125, 50%, 95%) -> #E8F5E9
@@ -26,3 +26,4 @@ export const TASK_STATUSES: { value: TaskStatus; label: string; icon: React.Elem
 ];
 
 export const DEFAULT_TASK_STATUS: TaskStatus = "Pendent";
+

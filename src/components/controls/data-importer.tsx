@@ -9,6 +9,7 @@ import { UploadCloud, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Task } from '@/types';
 import { parseXLSXFile, createNewTaskObject } from '@/lib/task-utils';
+import { XLSX_COLUMN_TERMINI, XLSX_COLUMN_CONTENT, XLSX_COLUMN_DUE_DATE } from '@/config/app-config';
 
 interface DataImporterProps {
   onTasksImported: (tasks: Task[]) => void;
@@ -79,7 +80,7 @@ export function DataImporter({ onTasksImported }: DataImporterProps) {
           Importar Tasques des d'XLSX
         </CardTitle>
         <CardDescription>
-          Puja un fitxer XLSX amb les columnes 'TERMINI', 'DOCUMENTS/ACCIONS', i 'DATA A FER'.
+          Puja un fitxer XLSX amb les columnes '{XLSX_COLUMN_TERMINI}', '{XLSX_COLUMN_CONTENT}', i '{XLSX_COLUMN_DUE_DATE}'.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

@@ -12,20 +12,12 @@ import {
 } from '@/config/app-config';
 
 // Helper to convert Excel serial date to JS Date
-// Excel stores dates as number of days since 1900-01-00 (Windows) or 1904-01-01 (Mac)
-// XLSX library usually handles this conversion if { cellDates: true } is used,
-// but sometimes manual conversion is needed if dates are read as numbers.
 function excelSerialToDate(serial: number): Date {
-  // Reference: https://github.com/SheetJS/sheetjs/blob/master/docbits/85_dates.md
-  // This formula is common, but SheetJS's internal `SSF.parse_date_code` is more robust.
-  // For simplicity, if cellDates:true doesn't work, this is a fallback.
-  // The (serial - 25569) converts from Excel epoch to Unix epoch (days)
-  // Multiply by 86400 seconds per day and 1000 ms per second.
   const utc_days = Math.floor(serial - 25569);
   const utc_value = utc_days * 86400;                                        
   const date_info = new Date(utc_value * 1000);
 
-  const fractional_day = serial - Math.floor(serial) + 0.0000001; // Add small epsilon
+  const fractional_day = serial - Math.floor(serial) + 0.0000001; 
 
   let total_seconds = Math.floor(86400 * fractional_day);
 
@@ -45,37 +37,55 @@ export const parseXLSXFile = async (file: File): Promise<Partial<Task>[]> => {
   const sheetName = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[sheetName];
   
-  // Using header: 1 to get array of arrays, easier to find header row
   const jsonDataRaw: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' });
 
   if (jsonDataRaw.length === 0) return [];
 
-  // Convert headers from the file to uppercase and trim whitespace for robust matching.
-  // The constants (XLSX_COLUMN_*) are already defined in uppercase.
-  const headers = jsonDataRaw[0].map(header => String(header).trim().toUpperCase());
-  
-  const terminiIndex = headers.indexOf(XLSX_COLUMN_TERMINI); // XLSX_COLUMN_TERMINI is 'TERMINI'
-  const contentIndex = headers.indexOf(XLSX_COLUMN_CONTENT); // XLSX_COLUMN_CONTENT is 'DOCUMENTS/ACCIONS'
-  const dueDateIndex = headers.indexOf(XLSX_COLUMN_DUE_DATE); // XLSX_COLUMN_DUE_DATE is 'DATA A FER'
+  let headerRowIndex = -1;
+  let headers: string[] = [];
 
+  // Find the header row
+  for (let i = 0; i < jsonDataRaw.length; i++) {
+    const row = jsonDataRaw[i].map(header => String(header || '').trim().toUpperCase());
+    if (
+      row.includes(XLSX_COLUMN_TERMINI) &&
+      row.includes(XLSX_COLUMN_CONTENT) &&
+      row.includes(XLSX_COLUMN_DUE_DATE)
+    ) {
+      headerRowIndex = i;
+      headers = row;
+      break;
+    }
+  }
+
+  if (headerRowIndex === -1) {
+    throw new Error(`Missing required columns or header row not found. Ensure '${XLSX_COLUMN_TERMINI}', '${XLSX_COLUMN_CONTENT}', and '${XLSX_COLUMN_DUE_DATE}' are present in one of the rows.`);
+  }
+  
+  const terminiIndex = headers.indexOf(XLSX_COLUMN_TERMINI);
+  const contentIndex = headers.indexOf(XLSX_COLUMN_CONTENT);
+  const dueDateIndex = headers.indexOf(XLSX_COLUMN_DUE_DATE);
+
+  // This check is technically redundant if headerRowIndex implies all columns were found, but kept for safety.
   if (terminiIndex === -1 || contentIndex === -1 || dueDateIndex === -1) {
-    throw new Error(`Missing required columns. Ensure '${XLSX_COLUMN_TERMINI}', '${XLSX_COLUMN_CONTENT}', and '${XLSX_COLUMN_DUE_DATE}' are present.`);
+     throw new Error(`One or more required columns ('${XLSX_COLUMN_TERMINI}', '${XLSX_COLUMN_CONTENT}', '${XLSX_COLUMN_DUE_DATE}') were not found in the identified header row.`);
   }
   
   const tasks: Partial<Task>[] = [];
-  // Start from 1 to skip header row
-  for (let i = 1; i < jsonDataRaw.length; i++) {
+  // Start from headerRowIndex + 1 to skip header row
+  for (let i = headerRowIndex + 1; i < jsonDataRaw.length; i++) {
     const row = jsonDataRaw[i];
     if (!row || row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) {
       continue; // Skip empty rows
     }
 
-    const terminiDays = parseInt(String(row[terminiIndex]), 10);
-    const content = String(row[contentIndex]);
+    const terminiDaysStr = row[terminiIndex] !== null && row[terminiIndex] !== undefined ? String(row[terminiIndex]) : '';
+    const terminiDays = parseInt(terminiDaysStr, 10);
+    const content = String(row[contentIndex] || ''); // Ensure content is a string, even if cell is null/undefined
     let originalDueDateInput = row[dueDateIndex];
     
-    if (content === null || String(content).trim() === '' || isNaN(terminiDays)) {
-        console.warn(`Skipping row ${i+1} due to missing content or invalid termini days.`);
+    if (content.trim() === '' || isNaN(terminiDays)) {
+        console.warn(`Skipping row ${i+1} due to missing content or invalid termini days. Content: "${content}", Termini: "${terminiDaysStr}"`);
         continue;
     }
 
@@ -83,20 +93,38 @@ export const parseXLSXFile = async (file: File): Promise<Partial<Task>[]> => {
     if (originalDueDateInput instanceof Date && isValid(originalDueDateInput)) {
       originalDueDate = originalDueDateInput;
     } else if (typeof originalDueDateInput === 'number') {
-      // Attempt to convert Excel serial date number
       originalDueDate = excelSerialToDate(originalDueDateInput);
       if (!isValid(originalDueDate)) {
-         console.warn(`Skipping row ${i+1}: Invalid Excel serial date for DATA A FER: ${originalDueDateInput}`);
+         console.warn(`Skipping row ${i+1}: Invalid Excel serial date for ${XLSX_COLUMN_DUE_DATE}: ${originalDueDateInput}`);
          continue;
       }
     } else if (typeof originalDueDateInput === 'string') {
       originalDueDate = parseISO(originalDueDateInput);
       if (!isValid(originalDueDate)) {
-        console.warn(`Skipping row ${i+1}: Could not parse date string for DATA A FER: ${originalDueDateInput}`);
-        continue;
+        // Attempt to parse common non-ISO date formats like DD/MM/YYYY or MM/DD/YYYY if parseISO fails
+        const parts = originalDueDateInput.split('/');
+        if (parts.length === 3) {
+          // Try DD/MM/YYYY
+          let dateAttempt = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+          if (isValid(dateAttempt)) {
+            originalDueDate = dateAttempt;
+          } else {
+            // Try MM/DD/YYYY
+            dateAttempt = new Date(`${parts[2]}-${parts[0]}-${parts[1]}`);
+            if (isValid(dateAttempt)) {
+              originalDueDate = dateAttempt;
+            } else {
+              console.warn(`Skipping row ${i+1}: Could not parse date string for ${XLSX_COLUMN_DUE_DATE}: ${originalDueDateInput}`);
+              continue;
+            }
+          }
+        } else {
+            console.warn(`Skipping row ${i+1}: Could not parse date string for ${XLSX_COLUMN_DUE_DATE}: ${originalDueDateInput}`);
+            continue;
+        }
       }
     } else {
-      console.warn(`Skipping row ${i+1}: Invalid or missing DATA A FER: ${originalDueDateInput}`);
+      console.warn(`Skipping row ${i+1}: Invalid or missing ${XLSX_COLUMN_DUE_DATE}: ${originalDueDateInput}`);
       continue;
     }
 
@@ -129,10 +157,19 @@ export const formatDate = (date: Date | string | undefined | null): string => {
   if (!date) return 'N/A';
   try {
     const d = typeof date === 'string' ? parseISO(date) : date;
-    if (!isValid(d)) return 'Data invàlida';
+    if (!isValid(d)) { // Check if date is valid after parsing
+        // Try to parse DD/MM/YYYY if parseISO failed or resulted in invalid date for string inputs
+        if (typeof date === 'string') {
+            const parts = date.split('/');
+            if (parts.length === 3) {
+                const directDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                 if(isValid(directDate)) return format(directDate, 'dd/MM/yyyy');
+            }
+        }
+       return 'Data invàlida';
+    }
     return format(d, 'dd/MM/yyyy');
   } catch (error) {
     return 'Data invàlida';
   }
 };
-
