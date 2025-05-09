@@ -1,3 +1,4 @@
+
 import * as XLSX from 'xlsx';
 import { subDays, parseISO, isValid, format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
@@ -49,11 +50,13 @@ export const parseXLSXFile = async (file: File): Promise<Partial<Task>[]> => {
 
   if (jsonDataRaw.length === 0) return [];
 
-  const headers = jsonDataRaw[0].map(header => String(header).trim());
+  // Convert headers from the file to uppercase and trim whitespace for robust matching.
+  // The constants (XLSX_COLUMN_*) are already defined in uppercase.
+  const headers = jsonDataRaw[0].map(header => String(header).trim().toUpperCase());
   
-  const terminiIndex = headers.indexOf(XLSX_COLUMN_TERMINI);
-  const contentIndex = headers.indexOf(XLSX_COLUMN_CONTENT);
-  const dueDateIndex = headers.indexOf(XLSX_COLUMN_DUE_DATE);
+  const terminiIndex = headers.indexOf(XLSX_COLUMN_TERMINI); // XLSX_COLUMN_TERMINI is 'TERMINI'
+  const contentIndex = headers.indexOf(XLSX_COLUMN_CONTENT); // XLSX_COLUMN_CONTENT is 'DOCUMENTS/ACCIONS'
+  const dueDateIndex = headers.indexOf(XLSX_COLUMN_DUE_DATE); // XLSX_COLUMN_DUE_DATE is 'DATA A FER'
 
   if (terminiIndex === -1 || contentIndex === -1 || dueDateIndex === -1) {
     throw new Error(`Missing required columns. Ensure '${XLSX_COLUMN_TERMINI}', '${XLSX_COLUMN_CONTENT}', and '${XLSX_COLUMN_DUE_DATE}' are present.`);
@@ -132,3 +135,4 @@ export const formatDate = (date: Date | string | undefined | null): string => {
     return 'Data invàlida';
   }
 };
+
