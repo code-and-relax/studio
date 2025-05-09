@@ -1,7 +1,15 @@
+// Suggested code may be subject to a license. Learn more: ~LicenseLog:1104946653.
+// Suggested code may be subject to a license. Learn more: ~LicenseLog:184535481.
+// Suggested code may be subject to a license. Learn more: ~LicenseLog:2395362187.
+// Suggested code may be subject to a license. Learn more: ~LicenseLog:1011420528.
+// Suggested code may be subject to a license. Learn more: ~LicenseLog:1273726450.
+// Suggested code may be subject to a license. Learn more: ~LicenseLog:656082081.
+// Suggested code may be subject to a license. Learn more: ~LicenseLog:601238174.
+// Suggested code may be subject to a license. Learn more: ~LicenseLog:2154862345.
+// Suggested code may be subject to a license. Learn more: ~LicenseLog:414335350.
 
 'use client';
 
-import { useState, ChangeEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,8 +17,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { UploadCloud, FileText, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Task } from '@/types';
-import { parseTaskFile, createNewTaskObject } from '@/lib/task-utils'; 
+import { parseTaskFile, createNewTaskObject } from '@/lib/task-utils';
 import { APP_HEADER_TERMINI, APP_HEADER_CONTENT, APP_HEADER_DUE_DATE } from '@/config/app-config';
+import { useState, ChangeEvent, DragEvent, useCallback } from 'react';
 
 interface DataImporterProps {
   onTasksImported: (tasks: Task[]) => void;
@@ -35,10 +44,40 @@ export function DataImporter({ onTasksImported, onTasksReplaced, onDownloadCSV }
           description: "Si us plau, selecciona un fitxer CSV.",
         });
         setFile(null);
-        event.target.value = ""; 
+        event.target.value = "";
       }
     }
   };
+
+  const handleDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const files = event.dataTransfer.files;
+    if (files && files[0]) {
+      const selectedFile = files[0];
+      if (selectedFile.type === 'text/csv' || selectedFile.name.endsWith('.csv') || selectedFile.type === 'application/vnd.ms-excel') {
+        setFile(selectedFile);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Fitxer invàlid",
+          description: "Si us plau, selecciona un fitxer CSV.",
+        });
+        setFile(null);
+      }
+    }
+  }, [toast]);
+
+  const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
+
+  const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
 
   const handleImport = async (replaceExisting: boolean = false) => {
     if (!file) {
@@ -51,9 +90,9 @@ export function DataImporter({ onTasksImported, onTasksReplaced, onDownloadCSV }
 
     setIsLoading(true);
     try {
-      const partialTasks = await parseTaskFile(file); 
+      const partialTasks = await parseTaskFile(file);
       const newTasks = partialTasks.map(pt => createNewTaskObject(pt));
-      
+
       if (replaceExisting) {
         onTasksReplaced(newTasks);
       } else {
@@ -64,7 +103,7 @@ export function DataImporter({ onTasksImported, onTasksReplaced, onDownloadCSV }
         title: `Importació completada ${replaceExisting ? '(reemplaçant)' : '(afegint)'}`,
         description: `${newTasks.length} tasques importades correctament des del CSV.`,
       });
-      setFile(null); 
+      setFile(null);
       const fileInput = document.getElementById('file-upload') as HTMLInputElement;
       if (fileInput) fileInput.value = "";
 
@@ -92,9 +131,25 @@ export function DataImporter({ onTasksImported, onTasksReplaced, onDownloadCSV }
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid w-full max-w-sm items-center gap-1.5">
+        <div className="grid w-full items-center gap-1.5">
           <Label htmlFor="file-upload">Fitxer CSV</Label>
-          <Input id="file-upload" type="file" accept=".csv,text/csv,application/vnd.ms-excel" onChange={handleFileChange} className="file:text-sm file:font-medium"/>
+          <div
+            className="flex items-center justify-center w-full border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 dark:border-gray-600 min-h-[150px]"
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={() => document.getElementById('file-upload')?.click()}
+          >
+            <div className="flex flex-col items-center justify-center text-center p-4">
+              <svg className="w-8 h-8 mb-4 text-gray-500 dark:text-gray-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2" />
+              </svg>
+              <p className="mb-2 text-sm text-gray-500 dark:text-gray-400"><span className="font-semibold">Clica per pujar</span> o arrossega i deixa anar</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Només fitxers CSV</p>
+              {file && <p className="mt-2 text-sm text-primary dark:text-primary">{file.name}</p>}
+            </div>
+            <input id="file-upload" type="file" accept=".csv,text/csv,application/vnd.ms-excel" onChange={handleFileChange} className="hidden" />
+          </div>
         </div>
         {file && (
           <div className="flex items-center text-sm text-muted-foreground">
@@ -102,12 +157,12 @@ export function DataImporter({ onTasksImported, onTasksReplaced, onDownloadCSV }
             <span>{file.name}</span>
           </div>
         )}
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 mt-4">
           <Button onClick={() => handleImport(false)} disabled={!file || isLoading} className="flex-1">
-            {isLoading ? 'Important...' : 'Afegir Tasques (CSV)'}
+            {isLoading ? 'Important...' : 'Afegir Tasques'}
           </Button>
           <Button onClick={() => handleImport(true)} disabled={!file || isLoading} variant="outline" className="flex-1">
-            {isLoading ? 'Reemplaçant...' : 'Reemplaçar amb CSV'}
+            {isLoading ? 'Reemplaçant...' : 'Reemplaçar Tasques'}
           </Button>
         </div>
         <Button onClick={onDownloadCSV} variant="secondary" className="w-full">
