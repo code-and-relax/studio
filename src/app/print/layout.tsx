@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
+import '../globals.css'; // Ensure globals are loaded for print styles too
 import { Geist, Geist_Mono } from 'next/font/google';
-import './globals.css';
-import { Toaster } from "@/components/ui/toaster";
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -13,21 +12,21 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
+
 export const metadata: Metadata = {
-  title: 'Academia Board',
-  description: 'Manage your academic tasks with post-it notes.',
+  title: 'Imprimir Tasques - Academia Board',
+  description: 'Versió per imprimir de les tasques.',
 };
 
-export default function RootLayout({
+export default function PrintLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
+    <html lang="ca">
+      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-white text-black print-container`}>
         {children}
-        <Toaster />
       </body>
     </html>
   );
