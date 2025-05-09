@@ -1,7 +1,6 @@
 
-import { parse, isValid, format, parseISO } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
-import type { Task } from '@/types';
+import type { Task, TaskStatus } from '@/types';
 import { 
   APP_HEADER_TERMINI, 
   APP_HEADER_CONTENT, 
@@ -12,341 +11,344 @@ import {
   INITIAL_POSTIT_COLOR,
   DEFAULT_TASK_STATUS
 } from '@/config/app-config';
+import { format, parse, isValid, parseISO } from 'date-fns';
+import { ca } from 'date-fns/locale';
+import * as XLSX from 'xlsx';
 
-// Helper to parse various date string formats (DD/MM/YY, DD/MM/YYYY, YYYY-MM-DD)
-// Exported for use in TaskCard and AddTaskForm
-export function parseCustomDateString(dateStr: string | null | undefined): Date | null {
-  if (!dateStr || typeof dateStr !== 'string') return null;
+// --- Date Handling ---
 
-  const trimmedDateStr = dateStr.trim();
-  if (trimmedDateStr.toUpperCase() === '#VALUE!' || trimmedDateStr === '-' || trimmedDateStr === '' || ["Data no especificada", "Data Desconeguda", "N/A"].includes(trimmedDateStr)) return null;
+/**
+ * Parses a date string using multiple formats, including specific Spanish locale format.
+ * Handles "N/A", "Data no especificada", "Data Desconeguda", "#VALUE!".
+ * @param dateString The date string to parse.
+ * @returns A Date object or the original string if parsing fails or it's a special string.
+ */
+export const parseCustomDateString = (dateString: string | Date | undefined | null): Date | string => {
+  if (dateString instanceof Date) {
+    return isValid(dateString) ? dateString : "Data invàlida";
+  }
+  if (typeof dateString !== 'string' || !dateString.trim()) {
+    return "Data no especificada";
+  }
 
+  const trimmedDateString = dateString.trim();
+  const specialStrings = ["DATA NO ESPECIFICADA", "DATA DESCONEGUDA", "N/A", "#VALUE!", ""];
+  if (specialStrings.includes(trimmedDateString.toUpperCase())) {
+    return dateString; // Return original special string
+  }
 
-  let parsedDate: Date | null = null;
-  const referenceDate = new Date(); 
+  // Try ISO format first
+  let date = parseISO(trimmedDateString);
+  if (isValid(date)) return date;
 
-  // Handle 'dd/MM/yyyy' format
-  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmedDateStr)) {
-    parsedDate = parse(trimmedDateStr, 'dd/MM/yyyy', referenceDate);
-    if (isValid(parsedDate)) return parsedDate;
+  // Common European/Spanish formats
+  const formats = ['dd/MM/yyyy', 'd/M/yyyy', 'dd-MM-yyyy', 'd-M-yyyy', 'yyyy-MM-dd'];
+  for (const fmt of formats) {
+    date = parse(trimmedDateString, fmt, new Date());
+    if (isValid(date)) return date;
   }
   
-  // Handle 'dd/MM/yy' format
-  if (/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(trimmedDateStr)) {
-    parsedDate = parse(trimmedDateStr, 'dd/MM/yy', referenceDate);
-    if (isValid(parsedDate)) return parsedDate;
-  }
-  
-  // Handle 'yyyy-MM-dd' format (ISO or similar)
-  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(trimmedDateStr)) {
-    try {
-        // Try direct ISO parsing first
-        parsedDate = parseISO(trimmedDateStr);
-        if (isValid(parsedDate)) return parsedDate;
-    } catch (e) { /* Ignore, try manual parsing */ }
-
-    // Manual parsing for 'yyyy-MM-dd' if parseISO fails or is too strict
-    const parts = trimmedDateStr.split('-');
-    if (parts.length === 3) {
-        const year = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) -1; // Month is 0-indexed in Date
-        const day = parseInt(parts[2], 10);
-        // Ensure parts are valid numbers and form a valid date
-        const dateFromParts = new Date(Date.UTC(year, month, day)); // Use UTC to avoid timezone issues with date-only strings
-        if (isValid(dateFromParts) && 
-            dateFromParts.getUTCFullYear() === year &&
-            dateFromParts.getUTCMonth() === month &&
-            dateFromParts.getUTCDate() === day) { // Check if parts created the intended date
-            return dateFromParts;
-        }
+  // Try to parse as Excel date serial number (if it's a number string)
+  if (/^\d+(\.\d+)?$/.test(trimmedDateString)) {
+    const excelSerialDate = parseFloat(trimmedDateString);
+    if (!isNaN(excelSerialDate)) {
+      // Excel base date is December 30, 1899 for Windows, or January 1, 1904 for Mac.
+      // Assuming Windows for now.
+      const baseDate = new Date(1899, 11, 30); // Excel's epoch on Windows
+      date = new Date(baseDate.valueOf() + (excelSerialDate -1) * 24 * 60 * 60 * 1000);
+      if (isValid(date)) return date;
     }
   }
-  
-  // Fallback for other potential Excel date serial numbers or unhandled formats (attempt general parsing)
-  // This is very broad, might need refinement if specific unhandled formats appear
-  const generalParseAttempt = new Date(trimmedDateStr);
-  if (isValid(generalParseAttempt)) {
-    return generalParseAttempt;
-  }
 
-  return null; 
-}
-
-const cleanHeader = (header: string): string => {
-  return String(header || '').trim().toUpperCase();
+  return dateString; // Return original string if all parsing fails
 };
 
 
+/**
+ * Formats a date for display.
+ * @param date The date to format (can be Date object or string).
+ * @returns Formatted date string or the original string if invalid/special.
+ */
+export const formatDate = (date: Date | string | undefined | null): string => {
+  if (date instanceof Date && isValid(date)) {
+    return format(date, 'P', { locale: ca }); // 'P' is a localized date format, e.g., 23/12/2023
+  }
+  if (typeof date === 'string') {
+    const parsed = parseCustomDateString(date);
+    if (parsed instanceof Date && isValid(parsed)) {
+      return format(parsed, 'P', { locale: ca });
+    }
+    return date; // Return original string if it's a special string or unparseable
+  }
+  return "Data no especificada";
+};
+
+// --- CSV Parsing ---
+
+const normalizeHeader = (header: string): string => (header || '').trim().toUpperCase();
+
+const findHeaderIndex = (headers: string[], variants: string[]): number => {
+  const normalizedVariants = variants.map(normalizeHeader);
+  for (const variant of normalizedVariants) {
+    const index = headers.findIndex(h => normalizeHeader(h) === variant);
+    if (index !== -1) return index;
+  }
+  return -1;
+};
+
+/**
+ * Parses a CSV file to extract tasks.
+ * @param file The CSV file to parse.
+ * @returns A promise that resolves to an array of partial Task objects.
+ */
 export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
-  const fileText = await file.text();
-  const lines = fileText.split(/\r?\n/);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const csvData = event.target?.result as string;
+        const rows = csvData.split(/\r\n|\n/).map(row => row.split(','));
 
-  if (lines.length === 0) return [];
+        let terminiColIndex = -1;
+        let contentColIndex = -1;
+        let dueDateColIndex = -1;
+        let headerRowValues: string[] = [];
+        let maxHeaderRowIndex = -1; // To find the actual header row
 
-  let terminiColIndex = -1;
-  let contentColIndex = -1;
-  let dueDateColIndex = -1;
-  let maxHeaderRowIndex = -1; 
+        // Search for headers in the first 10 rows
+        for (let i = 0; i < Math.min(rows.length, 10); i++) {
+          const currentRow = rows[i].map(normalizeHeader);
+          const currentTermini = findHeaderIndex(currentRow, HEADER_VARIANTS_TERMINI);
+          const currentContent = findHeaderIndex(currentRow, HEADER_VARIANTS_CONTENT);
+          const currentDueDate = findHeaderIndex(currentRow, HEADER_VARIANTS_DUE_DATE);
 
-  const MAX_HEADER_SCAN_LINES = 20; 
-
-  const VARIANTS_TERMINI_UPPER = HEADER_VARIANTS_TERMINI.map(s => cleanHeader(s));
-  const VARIANTS_CONTENT_UPPER = HEADER_VARIANTS_CONTENT.map(s => cleanHeader(s));
-  const VARIANTS_DUE_DATE_UPPER = HEADER_VARIANTS_DUE_DATE.map(s => cleanHeader(s));
-  
-  const foundHeaders: { [key: string]: string } = {};
-
-  for (let i = 0; i < Math.min(lines.length, MAX_HEADER_SCAN_LINES); i++) {
-    const lineContent = lines[i];
-    if (lineContent.trim() === '' || lineContent.split(',').every(cell => cell.trim() === '')) continue;
-
-    const currentCells = lineContent.split(',').map(cell => String(cell || '').trim());
-    const currentCellsUpper = currentCells.map(cell => cleanHeader(cell));
-    
-    let headersFoundInThisRow = 0;
-
-    if (terminiColIndex === -1) {
-      for (const variant of VARIANTS_TERMINI_UPPER) {
-        const idx = currentCellsUpper.indexOf(variant);
-        if (idx !== -1) {
-          terminiColIndex = idx;
-          foundHeaders[APP_HEADER_TERMINI] = currentCells[idx];
-          headersFoundInThisRow++;
-          break; 
+          // Prioritize rows that contain more of the target headers
+          let foundCount = [currentTermini, currentContent, currentDueDate].filter(idx => idx !== -1).length;
+          
+          if (foundCount > [terminiColIndex, contentColIndex, dueDateColIndex].filter(idx => idx !== -1).length || maxHeaderRowIndex === -1) {
+             if (currentTermini !== -1) terminiColIndex = currentTermini;
+             if (currentContent !== -1) contentColIndex = currentContent;
+             if (currentDueDate !== -1) dueDateColIndex = currentDueDate;
+             headerRowValues = currentRow; // Store the headers of this potential row
+             maxHeaderRowIndex = i; // Update the row index considered as header
+          }
+          // If all three found in this row, break early
+          if (terminiColIndex !== -1 && contentColIndex !== -1 && dueDateColIndex !== -1) break;
         }
-      }
-    }
-    if (contentColIndex === -1) {
-      for (const variant of VARIANTS_CONTENT_UPPER) {
-        const idx = currentCellsUpper.indexOf(variant);
-        if (idx !== -1) {
-          contentColIndex = idx;
-          foundHeaders[APP_HEADER_CONTENT] = currentCells[idx];
-          headersFoundInThisRow++;
-          break;
+        
+        const errorMessages: string[] = [];
+        if (terminiColIndex === -1 && (HEADER_VARIANTS_TERMINI.includes(APP_HEADER_TERMINI) || HEADER_VARIANTS_TERMINI.includes(APP_HEADER_TERMINI.substring(1)))) {
+           // Termini is optional if not explicitly among primary required headers
+        } else if (terminiColIndex === -1) {
+           // If Termini *is* considered primary (not the case with current config but for robustness)
+           // errorMessages.push(`Columna Termini no trobada (variants esperades: ${HEADER_VARIANTS_TERMINI.join(', ')})`);
         }
-      }
-    }
-    if (dueDateColIndex === -1) {
-       for (const variant of VARIANTS_DUE_DATE_UPPER) {
-        const idx = currentCellsUpper.indexOf(variant);
-        if (idx !== -1) {
-          dueDateColIndex = idx;
-          foundHeaders[APP_HEADER_DUE_DATE] = currentCells[idx];
-          headersFoundInThisRow++;
-          break;
+
+        if (contentColIndex === -1) errorMessages.push(`Columna Contingut no trobada (variants esperades: ${HEADER_VARIANTS_CONTENT.join(', ')})`);
+        if (dueDateColIndex === -1) errorMessages.push(`Columna Data a Fer no trobada (variants esperades: ${HEADER_VARIANTS_DUE_DATE.join(', ')})`);
+        
+        if (contentColIndex === -1 || dueDateColIndex === -1 ) { // Critical headers missing
+           throw new Error(`No s'han pogut trobar totes les columnes necessàries. Detalls: ${errorMessages.join('; ')}. Assegura't que el CSV conté aquestes capçaleres a les primeres files.`);
         }
+        
+        // If maxHeaderRowIndex is still -1, it means no identifiable header row was found for critical columns.
+        if (maxHeaderRowIndex === -1 && (contentColIndex === -1 || dueDateColIndex === -1)) {
+          throw new Error(`No s'ha trobat una fila de capçalera vàlida amb '${APP_HEADER_CONTENT}' i '${APP_HEADER_DUE_DATE}' dins les primeres 10 files.`);
+        }
+
+
+        const dataStartRow = maxHeaderRowIndex + 1;
+        const tasks: Partial<Task>[] = [];
+
+        for (let i = dataStartRow; i < rows.length; i++) {
+          const row = rows[i];
+          if (row.every(cell => !cell || cell.trim() === '')) continue; // Skip empty rows
+
+          const content = row[contentColIndex]?.trim() || '';
+          // If content is empty, but other cells in expected columns might have data, skip
+          if (!content) continue;
+
+          const terminiRaw = terminiColIndex !== -1 ? (row[terminiColIndex]?.trim() || "N/A") : "N/A";
+          const originalDueDateRaw = row[dueDateColIndex]?.trim() || "Data no especificada";
+          
+          const originalDueDate = parseCustomDateString(originalDueDateRaw);
+
+          tasks.push({
+            content,
+            terminiRaw,
+            originalDueDate,
+            adjustedDate: originalDueDate, // Initially same as original
+          });
+        }
+        resolve(tasks);
+      } catch (error: any) {
+        console.error("Error processing CSV file:", error);
+        reject(new Error(error.message || "Error en processar el fitxer CSV."));
       }
-    }
-    
-    // If at least two of the primary target headers are found in this row, consider it the header row.
-    // This handles cases where one might be optional (like #TERMINI) or uses a very different variant.
-    const primaryHeadersFound = (foundHeaders[APP_HEADER_CONTENT] ? 1:0) + (foundHeaders[APP_HEADER_DUE_DATE] ? 1:0);
-    
-    if (headersFoundInThisRow > 0 && primaryHeadersFound >=1) { // Check if we found at least one expected header
-      // If a more complete header row is found later, it will overwrite maxHeaderRowIndex.
-      // We prioritize rows that contain more of the target headers.
-      if (i > maxHeaderRowIndex || headersFoundInThisRow > (Object.keys(foundHeaders).length) ) {
-         maxHeaderRowIndex = i;
-      }
-      // If we've found all three target headers, we can confidently break.
-      if (terminiColIndex !== -1 && contentColIndex !== -1 && dueDateColIndex !== -1) {
-          maxHeaderRowIndex = i; // Ensure this row is marked as header row
-          break; 
-      }
-    }
-  }
-  
-  const errorMessages: string[] = [];
-  if (contentColIndex === -1) {
-    errorMessages.push(`Columna Contingut no trobada (variants esperades: ${HEADER_VARIANTS_CONTENT.join(', ')})`);
-  }
-  if (dueDateColIndex === -1) {
-    errorMessages.push(`Columna Data a Fer no trobada (variants esperades: ${HEADER_VARIANTS_DUE_DATE.join(', ')})`);
-  }
-   // Termini is optional, so we don't throw an error if it's missing, but warn.
-  if (terminiColIndex === -1 && maxHeaderRowIndex !== -1) { // Only warn if we think we found a header row
-    console.warn(`Columna Termini no trobada (variants: ${HEADER_VARIANTS_TERMINI.join(', ')}). Les dades de Termini seran "N/A" per defecte.`);
-  }
-
-
-  if (contentColIndex === -1 || dueDateColIndex === -1 ) { // Critical headers missing
-     throw new Error(`No s'han pogut trobar totes les columnes necessàries. Detalls: ${errorMessages.join('; ')}. Assegura't que el CSV conté aquestes capçaleres a les primeres files.`);
-  }
-  
-  // If maxHeaderRowIndex is still -1, it means no identifiable header row was found.
-  // This can happen if the CSV has no headers, or headers are completely different.
-  if (maxHeaderRowIndex === -1) {
-      console.warn("No s'ha pogut identificar una fila de capçalera clara. S'intentarà processar les dades assumint un ordre de columnes per defecte si les columnes crítiques s'han trobat (això no hauria de passar si contentColIndex o dueDateColIndex són -1).");
-      // This state implies an issue with the CSV or parsing logic if critical checks failed.
-      // If criticals somehow passed but no header row ID'd, something is very off.
-      // For now, the throw above for missing critical headers should catch most headerless issues.
-  }
-
-  const dataStartRow = maxHeaderRowIndex === -1 ? 0 : maxHeaderRowIndex + 1; // If no header row, start from first line
-
-  if (dataStartRow >= lines.length && maxHeaderRowIndex !== -1) { 
-     console.warn("Capçaleres trobades, però no s'han detectat línies de dades després de les capçaleres.");
-     return [];
-  }
-  
-  const tasks: Partial<Task>[] = [];
-  for (let i = dataStartRow; i < lines.length; i++) {
-    const line = lines[i];
-    // Skip if line is completely empty or only contains commas
-    if (line.trim() === '' || line.split(',').every(cell => cell.trim() === '')) { 
-        continue; 
-    }
-    
-    const row = line.split(','); 
-
-    const terminiRaw = (terminiColIndex !== -1 && row[terminiColIndex]) ? String(row[terminiColIndex] || '').trim() : "N/A";
-    const content = (contentColIndex !== -1 && row[contentColIndex]) ? String(row[contentColIndex] || '').trim() : "";
-    const originalDueDateStr = (dueDateColIndex !== -1 && row[dueDateColIndex]) ? String(row[dueDateColIndex] || '').trim() : "";
-    
-    // Skip row if essential content is missing. Termini and DueDate can be somewhat flexible.
-    if (content === '') { 
-      console.warn(`Saltant fila ${i + 1} per contingut buit. Termini: "${terminiRaw}", DataVenciment: "${originalDueDateStr}". Línia: "${line}"`);
-      continue;
-    }
-
-    let taskDueDateField: Date | string;
-    const parsedDate = parseCustomDateString(originalDueDateStr);
-
-    if (parsedDate && isValid(parsedDate)) {
-        taskDueDateField = parsedDate;
-    } else {
-        // Keep original string if parsing fails or if it's a special string like '#VALUE!'
-        taskDueDateField = originalDueDateStr || "Data no especificada"; 
-    }
-    
-    tasks.push({
-      content,
-      originalDueDate: taskDueDateField,
-      terminiRaw: terminiRaw, 
-      adjustedDate: taskDueDateField, 
-    });
-  }
-  return tasks;
+    };
+    reader.onerror = (error) => {
+      console.error("Error reading file:", error);
+      reject(new Error("No s'ha pogut llegir el fitxer."));
+    };
+    reader.readAsText(file, 'UTF-8'); // Specify UTF-8 encoding
+  });
 };
 
+
+// --- Task Object Creation ---
+
+/**
+ * Creates a new full Task object from partial data.
+ * @param partialTask Partial task data.
+ * @returns A full Task object with defaults.
+ */
 export const createNewTaskObject = (partialTask: Partial<Task>): Task => {
   const now = new Date();
-  const id = partialTask.id || uuidv4(); 
-
-  const determineDateValue = (dateInput: Date | string | undefined): Date | string => {
-    if (dateInput instanceof Date && isValid(dateInput)) {
-      return dateInput;
-    }
-    if (typeof dateInput === 'string' && dateInput.trim() !== "") {
-      const parsed = parseCustomDateString(dateInput);
-      if (parsed && isValid(parsed)) return parsed;
-      // If parsing fails, return the original string (could be "N/A", "#VALUE!", etc.)
-      return dateInput; 
-    }
-    return "Data no especificada"; // Default if undefined or empty string
-  };
-
-  const finalOriginalDueDate = determineDateValue(partialTask.originalDueDate);
-  // If adjustedDate is not provided, default it to originalDueDate.
-  // If it IS provided, process it with determineDateValue as well.
-  const finalAdjustedDate = determineDateValue(partialTask.adjustedDate ?? finalOriginalDueDate);
-  
-  // Ensure terminiRaw is always a string, defaulting to "N/A" if undefined.
-  const terminiValue = typeof partialTask.terminiRaw === 'string' 
-    ? partialTask.terminiRaw 
-    : (partialTask.terminiRaw === undefined ? "N/A" : String(partialTask.terminiRaw));
-
-
   return {
-    id: id,
-    content: partialTask.content || `Nova tasca ${id.substring(0,4)}`,
-    terminiRaw: terminiValue, // Directly use the processed string
-    originalDueDate: finalOriginalDueDate, // This is what was 'DATA A FER'
-    adjustedDate: finalAdjustedDate, // User-editable date, defaults to originalDueDate
+    id: partialTask.id || uuidv4(),
+    content: partialTask.content || "Nova Tasca",
+    terminiRaw: partialTask.terminiRaw || "N/A",
+    originalDueDate: partialTask.originalDueDate || "Data no especificada",
+    adjustedDate: partialTask.adjustedDate || partialTask.originalDueDate || "Data no especificada",
     status: partialTask.status || DEFAULT_TASK_STATUS,
     color: partialTask.color || INITIAL_POSTIT_COLOR,
-    createdAt: (partialTask.createdAt && partialTask.createdAt instanceof Date && isValid(partialTask.createdAt)) ? partialTask.createdAt : now,
+    createdAt: partialTask.createdAt || now,
   };
 };
 
-// Exported for use in TaskCard and AddTaskForm for consistent display
-export const formatDate = (date: Date | string | undefined | null): string => {
-  if (!date) return 'N/A'; // Handles null, undefined
-  
-  if (date instanceof Date) {
-    if (isValid(date)) {
-      return format(date, 'dd/MM/yyyy');
-    }
-    return 'Data invàlida'; // Should not happen if date is validated before storing
+
+// --- CSV Export ---
+
+const formatForCSV = (value: any): string => {
+  if (value instanceof Date && isValid(value)) {
+    return format(value, 'dd/MM/yyyy');
   }
-  
-  // If it's a string, it might be a pre-formatted date, a special string, or something unparseable
-  if (typeof date === 'string') {
-    // Handle specific non-date strings first
-    if (["Data no especificada", "Data Desconeguda", "N/A"].includes(date) || date.toUpperCase() === "#VALUE!") {
-        return date; // Return as is
+  if (typeof value === 'string') {
+    // Escape quotes by doubling them, and enclose in quotes if it contains comma, newline, or quote
+    const str = value.replace(/"/g, '""');
+    if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+      return `"${str}"`;
     }
-    // Attempt to parse it, if successful, format it. Otherwise, return the string itself.
-    const parsedDate = parseCustomDateString(date);
-    if (parsedDate && isValid(parsedDate)) {
-      return format(parsedDate, 'dd/MM/yyyy');
-    }
-    return date; // Return original string if not parseable or not a special string
+    return str;
   }
-  
-  return 'Data desconeguda'; // Fallback for other types (e.g. number, though not expected)
+  return value?.toString() || '';
 };
-
-
-// Helper for CSV export to ensure data is escaped correctly
-function escapeCsvCell(cellData: any): string {
-  if (cellData == null) return ''; // Handle null or undefined by returning an empty string
-  
-  let cell = '';
-  // If it's a Date object, format it.
-  if (cellData instanceof Date && isValid(cellData)) {
-    cell = format(cellData, 'dd/MM/yyyy'); // Standard export format
-  } else if (typeof cellData === 'string'){
-    // If it's already one of our special "non-date" strings, use it as is
-    if (["Data no especificada", "Data Desconeguda", "N/A"].includes(cellData) || cellData.toUpperCase() === "#VALUE!") {
-        cell = cellData;
-    } else {
-        // Otherwise, attempt to parse and reformat. If not parseable, use original string.
-        const parsed = parseCustomDateString(cellData);
-        cell = (parsed && isValid(parsed)) ? format(parsed, 'dd/MM/yyyy') : cellData;
-    }
-  } else {
-     // For any other type, convert to string
-     cell = String(cellData);
-  }
-
-  // Escape quotes and handle commas/newlines
-  if (cell.includes(',') || cell.includes('\n') || cell.includes('"')) {
-    cell = `"${cell.replace(/"/g, '""')}"`; // Replace " with "" and wrap in quotes
-  }
-  return cell;
-}
 
 
 export const exportTasksToCSV = (tasks: Task[]): string => {
-  // Use the # prefixed headers for export consistency, as defined in app-config
-  const headerLine = [APP_HEADER_TERMINI, APP_HEADER_CONTENT, APP_HEADER_DUE_DATE].join(',');
-  
-  const rows = tasks.map(task => {
-    const termini = escapeCsvCell(task.terminiRaw);
-    const content = escapeCsvCell(task.content);
-    
-    // For export, use originalDueDate as it represents '#DATA A FER'
-    // Ensure it's formatted correctly if it's a Date object, or use the string as is.
-    const dueDateExportValue = task.originalDueDate instanceof Date && isValid(task.originalDueDate)
-                         ? format(task.originalDueDate, 'dd/MM/yyyy') 
-                         : (typeof task.originalDueDate === 'string' ? task.originalDueDate : '');
+  if (!tasks.length) return "";
 
-    const dueDate = escapeCsvCell(dueDateExportValue); 
-    return [termini, content, dueDate].join(',');
+  const headers = [
+    APP_HEADER_TERMINI,
+    APP_HEADER_CONTENT,
+    APP_HEADER_DUE_DATE, // Represents originalDueDate for export consistency
+    '#DATA AJUSTADA', // adjustedDate
+    '#ESTAT',
+    '#COLOR',
+    '#DATA CREACIÓ',
+    '#ID'
+  ];
+
+  const csvRows = [headers.join(',')];
+
+  tasks.forEach(task => {
+    const row = [
+      formatForCSV(task.terminiRaw),
+      formatForCSV(task.content),
+      formatForCSV(task.originalDueDate),
+      formatForCSV(task.adjustedDate),
+      formatForCSV(task.status),
+      formatForCSV(task.color),
+      formatForCSV(task.createdAt),
+      formatForCSV(task.id)
+    ];
+    csvRows.push(row.join(','));
   });
 
-  // Join header and rows with newline character
-  return [headerLine, ...rows].join('\n');
+  return csvRows.join('\n');
+};
+
+// --- XLSX Parsing (Legacy or alternative) ---
+// This function is kept for potential future use or if XLSX import is re-enabled.
+// Currently, the primary import is CSV.
+
+// Define expected column names for XLSX (can be same as CSV for consistency)
+const XLSX_COLUMN_TERMINI = APP_HEADER_TERMINI; // e.g., '#TERMINI'
+const XLSX_COLUMN_CONTENT = APP_HEADER_CONTENT; // e.g., '#DOCUMENTS/ACCIONS'
+const XLSX_COLUMN_DUE_DATE = APP_HEADER_DUE_DATE; // e.g., '#DATA A FER'
+
+export const parseXLSXFile = async (file: File): Promise<Partial<Task>[]> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = event.target?.result;
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json<any>(worksheet, { header: 1 });
+
+        if (jsonData.length === 0) {
+          reject(new Error("El fitxer XLSX està buit o no té dades."));
+          return;
+        }
+        
+        const headers: string[] = (jsonData[0] as string[]).map(h => String(h).trim());
+        
+        const terminiIndex = headers.findIndex(h => normalizeHeader(h) === normalizeHeader(XLSX_COLUMN_TERMINI));
+        const contentIndex = headers.findIndex(h => normalizeHeader(h) === normalizeHeader(XLSX_COLUMN_CONTENT));
+        const dueDateIndex = headers.findIndex(h => normalizeHeader(h) === normalizeHeader(XLSX_COLUMN_DUE_DATE));
+
+        if (terminiIndex === -1 || contentIndex === -1 || dueDateIndex === -1) {
+          let missingCols = [];
+          if (terminiIndex === -1) missingCols.push(XLSX_COLUMN_TERMINI);
+          if (contentIndex === -1) missingCols.push(XLSX_COLUMN_CONTENT);
+          if (dueDateIndex === -1) missingCols.push(XLSX_COLUMN_DUE_DATE);
+          reject(new Error(`Falten columnes necessàries. Assegura't que '${missingCols.join("', '")}' són presents a la capçalera del XLSX.`));
+          return;
+        }
+        
+        const tasks: Partial<Task>[] = [];
+        for (let i = 1; i < jsonData.length; i++) {
+          const row: any[] = jsonData[i] as any[];
+          if (row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) continue;
+
+          const content = row[contentIndex] ? String(row[contentIndex]).trim() : '';
+          if (!content) continue;
+
+          const terminiRaw = row[terminiIndex] ? String(row[terminiIndex]).trim() : "N/A";
+          
+          let originalDueDate: Date | string = "Data no especificada";
+          const dueDateCell = row[dueDateIndex];
+          if (dueDateCell instanceof Date && isValid(dueDateCell)) {
+            originalDueDate = dueDateCell;
+          } else if (typeof dueDateCell === 'string' && dueDateCell.trim()) {
+            originalDueDate = parseCustomDateString(dueDateCell.trim());
+          } else if (typeof dueDateCell === 'number') { // Excel date serial number
+             const excelSerialDate = parseFloat(String(dueDateCell));
+             const baseDate = new Date(1899, 11, 30);
+             const parsedDate = new Date(baseDate.valueOf() + (excelSerialDate - 1) * 24 * 60 * 60 * 1000);
+             if(isValid(parsedDate)) originalDueDate = parsedDate;
+          }
+
+
+          tasks.push({
+            content,
+            terminiRaw,
+            originalDueDate,
+            adjustedDate: originalDueDate,
+          });
+        }
+        resolve(tasks);
+      } catch (error: any) {
+        console.error("Error processing XLSX file:", error);
+        reject(new Error(error.message || "Error en processar el fitxer XLSX."));
+      }
+    };
+    reader.onerror = (error) => {
+      console.error("Error reading file:", error);
+      reject(new Error("No s'ha pogut llegir el fitxer."));
+    };
+    reader.readAsArrayBuffer(file);
+  });
 };
