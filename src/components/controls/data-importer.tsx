@@ -1,12 +1,3 @@
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:1104946653.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:184535481.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:2395362187.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:1011420528.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:1273726450.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:656082081.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:601238174.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:2154862345.
-// Suggested code may be subject to a license. Learn more: ~LicenseLog:414335350.
 
 'use client';
 
@@ -14,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { UploadCloud, FileText, Download } from 'lucide-react';
+import { UploadCloud, FileText, Download, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Task } from '@/types';
 import { parseTaskFile, createNewTaskObject } from '@/lib/task-utils';
@@ -25,9 +16,10 @@ interface DataImporterProps {
   onTasksImported: (tasks: Task[]) => void;
   onTasksReplaced: (tasks: Task[]) => void;
   onDownloadCSV: () => void;
+  onClearAllTasksRequested: () => void;
 }
 
-export function DataImporter({ onTasksImported, onTasksReplaced, onDownloadCSV }: DataImporterProps) {
+export function DataImporter({ onTasksImported, onTasksReplaced, onDownloadCSV, onClearAllTasksRequested }: DataImporterProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -127,14 +119,14 @@ export function DataImporter({ onTasksImported, onTasksReplaced, onDownloadCSV }
           Gestionar Tasques (CSV)
         </CardTitle>
         <CardDescription>
-          Puja un fitxer CSV per afegir o reemplaçar tasques. Les capçaleres requerides són '{APP_HEADER_TERMINI}', '{APP_HEADER_CONTENT}', i '{APP_HEADER_DUE_DATE}' (han de començar amb '#'). També pots descarregar les tasques actuals.
+          Puja un fitxer CSV per afegir o reemplaçar tasques. Les capçaleres requerides són '{APP_HEADER_TERMINI}', '{APP_HEADER_CONTENT}', i '{APP_HEADER_DUE_DATE}' (han de començar amb '#'). També pots descarregar les tasques actuals o eliminar-les totes.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid w-full items-center gap-1.5">
           <Label htmlFor="file-upload">Fitxer CSV</Label>
           <div
-            className="flex items-center justify-center w-full border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 dark:border-gray-600 min-h-[150px]"
+            className="flex items-center justify-center w-full border-2 border-dashed border-border rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 dark:border-gray-600 min-h-[150px]"
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -165,10 +157,16 @@ export function DataImporter({ onTasksImported, onTasksReplaced, onDownloadCSV }
             {isLoading ? 'Reemplaçant...' : 'Reemplaçar Tasques'}
           </Button>
         </div>
-        <Button onClick={onDownloadCSV} variant="secondary" className="w-full">
-          <Download className="mr-2 h-4 w-4" />
-          Descarregar Tasques (CSV)
-        </Button>
+        <div className="flex flex-col gap-2 mt-2">
+          <Button onClick={onDownloadCSV} variant="secondary" className="w-full">
+            <Download className="mr-2 h-4 w-4" />
+            Descarregar Tasques (CSV)
+          </Button>
+          <Button onClick={onClearAllTasksRequested} variant="destructive" className="w-full">
+            <Trash2 className="mr-2 h-4 w-4" />
+            Eliminar Totes les Tasques
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

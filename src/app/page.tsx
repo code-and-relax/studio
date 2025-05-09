@@ -10,6 +10,16 @@ import { TaskBoard } from '@/components/tasks/task-board';
 import { useToast } from "@/hooks/use-toast";
 import { exportTasksToCSV } from '@/lib/task-utils';
 import { isValid } from 'date-fns'; 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const TASKS_STORAGE_KEY = 'academiaBoardTasks';
 
@@ -18,6 +28,7 @@ export default function AcademiaBoardPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isClient, setIsClient] = useState(false);
   const { toast } = useToast();
+  const [isClearConfirmDialogOpen, setIsClearConfirmDialogOpen] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -44,12 +55,10 @@ export default function AcademiaBoardPage() {
 
           const mappedTasks = parsedRawTasks.map((task: any) => ({
             ...task,
-            // Preserve terminiRaw as string (even empty), default to "N/A" only if undefined/null
             terminiRaw: typeof task.terminiRaw === 'string' ? task.terminiRaw : "N/A",
             originalDueDate: mapStoredDate(task.originalDueDate),
             adjustedDate: mapStoredDate(task.adjustedDate),
             createdAt: mapStoredDate(task.createdAt),
-            // Ensure status and color have defaults if missing from older stored data
             status: task.status || 'Pendent', 
             color: task.color || '#E9F5E8' 
           }));
@@ -65,7 +74,7 @@ export default function AcademiaBoardPage() {
         }
       }
     }
-  }, []); 
+  }, [toast]); // Added toast to dependency array as it's used in the effect
 
   useEffect(() => {
     if (isClient && typeof window !== 'undefined') {
@@ -126,6 +135,26 @@ export default function AcademiaBoardPage() {
     }
   };
 
+  const requestClearAllTasks = () => {
+    if (tasks.length === 0) {
+      toast({
+        title: "Cap tasca per eliminar",
+        description: "Actualment no hi ha tasques al tauler.",
+      });
+      return;
+    }
+    setIsClearConfirmDialogOpen(true);
+  };
+
+  const confirmClearAllTasks = () => {
+    setTasks([]);
+    toast({
+      title: "Tasques eliminades",
+      description: "Totes les tasques han estat eliminades del tauler.",
+    });
+    setIsClearConfirmDialogOpen(false);
+  };
+
 
   const handleUpdateTask = (id: string, updates: Partial<Task>) => {
     setTasks(prevTasks =>
@@ -142,11 +171,12 @@ export default function AcademiaBoardPage() {
   const handlePrint = () => {
     if (isClient && typeof window !== 'undefined') {
       try {
+        // Ensure latest tasks are saved before printing
         localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
       } catch (error) {
         console.error("Error saving tasks to localStorage before printing:", error);
         toast({ variant: 'destructive', title: "Error d'impressió", description: "No s'ha pogut desar les dades per imprimir." });
-        return;
+        return; // Stop if saving fails
       }
 
       const printWindow = window.open('/print', '_blank');
@@ -160,7 +190,7 @@ export default function AcademiaBoardPage() {
               console.error("Error calling printWindow.print():", e);
               toast({ variant: 'destructive', title: "Error d'impressió", description: "No s'ha pogut iniciar la impressió." });
             }
-          }, 500); // Reduced delay, test for optimal timing
+          }, 250); // Reduced delay again, might need adjustment based on content complexity
         };
       } else {
         toast({ variant: 'destructive', title: "Error d'impressió", description: "No s'ha pogut obrir la finestra d'impressió. Comprova els permisos del navegador." });
@@ -204,6 +234,7 @@ export default function AcademiaBoardPage() {
             onTasksImported={handleTasksImported} 
             onTasksReplaced={handleTasksReplaced}
             onDownloadCSV={handleDownloadCSV}
+            onClearAllTasksRequested={requestClearAllTasks}
           />
           <SearchInput searchTerm={searchTerm} onSearchChange={setSearchTerm} />
           <TaskBoard
@@ -213,6 +244,22 @@ export default function AcademiaBoardPage() {
           />
         </div>
       </main>
+      <AlertDialog open={isClearConfirmDialogOpen} onOpenChange={setIsClearConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar eliminació</AlertDialogTitle>
+            <AlertDialogDescription>
+              Estàs segur que vols eliminar totes les tasques? Aquesta acció no es pot desfer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel·lar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmClearAllTasks} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Eliminar Totes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
