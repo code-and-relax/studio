@@ -9,6 +9,7 @@ import { SearchInput } from '@/components/controls/search-input';
 import { TaskBoard } from '@/components/tasks/task-board';
 import { useToast } from "@/hooks/use-toast";
 import { exportTasksToCSV } from '@/lib/task-utils';
+import { isValid } from 'date-fns'; // Import isValid from date-fns
 
 const TASKS_STORAGE_KEY = 'academiaBoardTasks';
 
@@ -24,14 +25,39 @@ export default function AcademiaBoardPage() {
       const storedTasks = localStorage.getItem(TASKS_STORAGE_KEY);
       if (storedTasks) {
         try {
-          const parsedTasks = JSON.parse(storedTasks).map((task: any) => ({
+          const parsedRawTasks = JSON.parse(storedTasks);
+          
+          const mapStoredDate = (dateField: any): Date | string => {
+            if (!dateField) return new Date(); // Default or placeholder
+            
+            // Attempt to parse as Date
+            const d = new Date(dateField);
+            
+            // Check if it's a valid date AND the original string wasn't something like "#VALUE!" or our placeholders
+            // that new Date() might interpret as a valid but incorrect date (e.g., new Date("#VALUE!") can be Jan 1 1970 sometimes).
+            // A simple heuristic: if it's a long numeric string, it might be a timestamp.
+            // If it's an ISO string, new Date() is usually good.
+            // If it's one of our specific non-date strings, keep it.
+            if (typeof dateField === 'string' && ["Data no especificada", "Data Desconeguda", "N/A"].includes(dateField) || dateField.toUpperCase?.() === "#VALUE!") {
+              return dateField;
+            }
+
+            if (isValid(d)) { // isValid from date-fns
+              // Additional check: if the original string was purely numeric and short, it might be a misinterpretation.
+              // For now, isValid should be a good primary check.
+              return d;
+            }
+            return String(dateField); // Keep as string if not a valid date representation
+          };
+
+          const mappedTasks = parsedRawTasks.map((task: any) => ({
             ...task,
-            terminiRaw: task.terminiRaw || "N/A", // Ensure terminiRaw is present
-            originalDueDate: task.originalDueDate ? new Date(task.originalDueDate) : new Date(),
-            adjustedDate: task.adjustedDate ? new Date(task.adjustedDate) : new Date(),
-            createdAt: task.createdAt ? new Date(task.createdAt) : new Date(),
+            terminiRaw: task.terminiRaw || "N/A",
+            originalDueDate: mapStoredDate(task.originalDueDate),
+            adjustedDate: mapStoredDate(task.adjustedDate),
+            createdAt: mapStoredDate(task.createdAt),
           }));
-          setTasks(parsedTasks);
+          setTasks(mappedTasks);
         } catch (error) {
           console.error("Error parsing stored tasks:", error);
           toast({
@@ -51,6 +77,7 @@ export default function AcademiaBoardPage() {
         localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
       } catch (error) {
         console.error("Error saving tasks to localStorage:", error);
+        // Optionally, inform user if storage fails
       }
     }
   }, [tasks, isClient]);
@@ -115,7 +142,6 @@ export default function AcademiaBoardPage() {
   const handlePrint = () => {
     if (isClient && typeof window !== 'undefined') {
       try {
-        // Ensure current tasks are in localStorage for the print page
         localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
       } catch (error) {
         console.error("Error saving tasks to localStorage before printing:", error);
@@ -126,7 +152,6 @@ export default function AcademiaBoardPage() {
       const printWindow = window.open('/print', '_blank');
       if (printWindow) {
         printWindow.onload = () => {
-          // Give the print page some time to load tasks from localStorage and render
           setTimeout(() => {
             try {
               printWindow.print();
@@ -134,7 +159,7 @@ export default function AcademiaBoardPage() {
               console.error("Error calling printWindow.print():", e);
               toast({ variant: 'destructive', title: "Error d'impressió", description: "No s'ha pogut iniciar la impressió." });
             }
-          }, 1000); // Delay may need adjustment based on complexity
+          }, 1000); 
         };
       } else {
         toast({ variant: 'destructive', title: "Error d'impressió", description: "No s'ha pogut obrir la finestra d'impressió. Comprova els permisos del navegador." });
