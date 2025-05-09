@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import type { Task } from '@/types';
 import { TaskBoard } from '@/components/tasks/task-board'; 
-import { isValid } from 'date-fns'; // Import isValid
+import { isValid } from 'date-fns'; 
 
 const TASKS_STORAGE_KEY = 'academiaBoardTasks';
 
@@ -20,28 +20,30 @@ export default function PrintPage() {
          try {
           const parsedRawTasks = JSON.parse(storedTasks);
 
+          // Aligned with src/app/page.tsx's mapStoredDate
           const mapStoredDate = (dateField: any): Date | string => {
-            if (!dateField) return new Date(); // Default or placeholder
+            if (!dateField) return "Data no especificada"; 
             
-            // Attempt to parse as Date
             const d = new Date(dateField);
             
             if (typeof dateField === 'string' && ["Data no especificada", "Data Desconeguda", "N/A"].includes(dateField) || dateField.toUpperCase?.() === "#VALUE!") {
               return dateField;
             }
 
-            if (isValid(d)) { // isValid from date-fns
+            if (isValid(d)) { 
               return d;
             }
-            return String(dateField); // Keep as string if not a valid date representation
+            return String(dateField); 
           };
 
           const mappedTasks = parsedRawTasks.map((task: any) => ({
             ...task,
-            terminiRaw: task.terminiRaw || "N/A",
+            terminiRaw: typeof task.terminiRaw === 'string' ? task.terminiRaw : "N/A",
             originalDueDate: mapStoredDate(task.originalDueDate),
             adjustedDate: mapStoredDate(task.adjustedDate),
             createdAt: mapStoredDate(task.createdAt),
+            status: task.status || 'Pendent', 
+            color: task.color || '#E9F5E8'  
           }));
           setTasks(mappedTasks);
         } catch (error) {
