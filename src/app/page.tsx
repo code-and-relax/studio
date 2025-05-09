@@ -26,9 +26,10 @@ export default function AcademiaBoardPage() {
         try {
           const parsedTasks = JSON.parse(storedTasks).map((task: any) => ({
             ...task,
-            originalDueDate: new Date(task.originalDueDate),
-            adjustedDate: new Date(task.adjustedDate),
-            createdAt: new Date(task.createdAt),
+            terminiRaw: task.terminiRaw || "N/A", // Ensure terminiRaw is present
+            originalDueDate: task.originalDueDate ? new Date(task.originalDueDate) : new Date(),
+            adjustedDate: task.adjustedDate ? new Date(task.adjustedDate) : new Date(),
+            createdAt: task.createdAt ? new Date(task.createdAt) : new Date(),
           }));
           setTasks(parsedTasks);
         } catch (error) {
@@ -114,6 +115,7 @@ export default function AcademiaBoardPage() {
   const handlePrint = () => {
     if (isClient && typeof window !== 'undefined') {
       try {
+        // Ensure current tasks are in localStorage for the print page
         localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
       } catch (error) {
         console.error("Error saving tasks to localStorage before printing:", error);
@@ -124,6 +126,7 @@ export default function AcademiaBoardPage() {
       const printWindow = window.open('/print', '_blank');
       if (printWindow) {
         printWindow.onload = () => {
+          // Give the print page some time to load tasks from localStorage and render
           setTimeout(() => {
             try {
               printWindow.print();
@@ -131,7 +134,7 @@ export default function AcademiaBoardPage() {
               console.error("Error calling printWindow.print():", e);
               toast({ variant: 'destructive', title: "Error d'impressió", description: "No s'ha pogut iniciar la impressió." });
             }
-          }, 1000); 
+          }, 1000); // Delay may need adjustment based on complexity
         };
       } else {
         toast({ variant: 'destructive', title: "Error d'impressió", description: "No s'ha pogut obrir la finestra d'impressió. Comprova els permisos del navegador." });
@@ -144,8 +147,8 @@ export default function AcademiaBoardPage() {
   const filteredTasks = useMemo(() => {
     if (!searchTerm) return tasks;
     return tasks.filter(task =>
-      task.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.terminiRaw.toLowerCase().includes(searchTerm.toLowerCase())
+      (task.content || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (task.terminiRaw || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [tasks, searchTerm]);
   
@@ -187,3 +190,4 @@ export default function AcademiaBoardPage() {
     </div>
   );
 }
+
