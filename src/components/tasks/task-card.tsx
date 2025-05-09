@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -16,7 +15,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarDays, Edit3, Palette, Trash2, MoreVertical, Info, Save, CheckCircle2, Circle, Loader2, Archive } from 'lucide-react';
+import { CalendarDays, Edit3, Palette, Trash2, MoreVertical, Info, Save } from 'lucide-react';
 import { formatDate, parseCustomDateString } from '@/lib/task-utils';
 import { POSTIT_COLOR_PALETTE, TASK_STATUSES, DEFAULT_TASK_STATUS } from '@/config/app-config';
 import { cn } from '@/lib/utils';
@@ -40,14 +39,13 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
 
   const [popoverCalendarOpen, setPopoverCalendarOpen] = useState(false);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const popoverColorContentRef = useRef<HTMLDivElement>(null);
 
 
-  // Derived state for calendar: ensure it's a Date object or undefined
   const getCalendarSelectedDate = (): Date | undefined => {
     if (task.adjustedDate instanceof Date && isValid(task.adjustedDate)) {
       return task.adjustedDate;
     }
-    // If it's a string, try to parse it. If not parsable, undefined.
     const parsed = parseCustomDateString(String(task.adjustedDate));
     return parsed && isValid(parsed) ? parsed : undefined;
   };
@@ -93,15 +91,14 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
     if (selectedDate) {
       onUpdateTask(task.id, { adjustedDate: selectedDate });
     } else {
-      // If cleared, set to a specific placeholder or handle as needed
       onUpdateTask(task.id, { adjustedDate: "Data no especificada" });
     }
-    setPopoverCalendarOpen(false); // Close popover after selection
+    setPopoverCalendarOpen(false); 
   };
 
   const handleColorChange = (color: string) => {
     onUpdateTask(task.id, { color });
-    setColorPickerOpen(false); // Close popover after color selection
+    setColorPickerOpen(false); 
   };
 
   const handleStatusChange = (status: TaskStatus) => {
@@ -109,45 +106,38 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
   };
   
   const currentStatusConfig = TASK_STATUSES.find(s => s.value === (task.status || DEFAULT_TASK_STATUS));
-  const CurrentStatusIcon = currentStatusConfig?.icon || Circle;
+  const CurrentStatusIcon = currentStatusConfig?.icon || Info;
 
 
   const cardStyle = {
     backgroundColor: task.color,
-    // Basic contrast check: if color is light, use dark text, else use white text.
-    // This is a simplification. True WCAG contrast calculation is more complex.
     color: parseInt(task.color.substring(1), 16) > 0xffffff / 2 ? 'hsl(var(--card-foreground))' : '#ffffff',
   };
 
   const mainTextColor = cardStyle.color;
-  // A more nuanced subtle text color based on background lightness.
-  // If background is very light (e.g., close to white), use a darker subtle text.
-  // If background is darker, use a lighter subtle text.
   const subtleTextColor = parseInt(task.color.substring(1), 16) > 0xffffff / 1.5 
-    ? 'rgba(0, 0, 0, 0.65)' // For light backgrounds like yellow, light green
-    : 'rgba(255, 255, 255, 0.75)'; // For darker backgrounds
+    ? 'rgba(0, 0, 0, 0.65)' 
+    : 'rgba(255, 255, 255, 0.75)';
 
 
   if (isPrintView) {
     const printCardStyle = {
       backgroundColor: task.color,
-      color: parseInt(task.color.substring(1), 16) > 0xffffff / 1.5 ? 'black' : 'white', // Simplified contrast for print
-      border: '1px solid #ddd', // Ensure border for cutting
+      color: parseInt(task.color.substring(1), 16) > 0xffffff / 1.5 ? 'black' : 'white', 
+      border: '1px solid #ddd', 
     };
-    // Muted text color for print, ensuring readability
     const printMutedColor = parseInt(task.color.substring(1), 16) > 0xffffff / 1.5 ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)';
 
     return (
       <div className="postit-print break-inside-avoid flex flex-col justify-between" style={printCardStyle}>
-        <div> {/* Content Section */}
+        <div> 
           <h3 className="text-sm font-semibold mb-1.5 break-words hyphens-auto leading-tight" style={{ color: printCardStyle.color }}>
             {task.content}
           </h3>
         </div>
-        <div className="mt-auto text-[10px] space-y-0.5" style={{ color: printMutedColor }}> {/* Footer Section */}
+        <div className="mt-auto text-[10px] space-y-0.5" style={{ color: printMutedColor }}> 
           <p><span className="font-medium" style={{ color: printCardStyle.color }}>Condició Termini:</span> {task.terminiRaw || "N/A"}</p>
           <p><span className="font-medium" style={{ color: printCardStyle.color }}>Data Límit:</span> {formatDate(task.adjustedDate)}</p>
-          {/* Status is intentionally omitted for print view as per user request */}
         </div>
       </div>
     );
@@ -157,9 +147,9 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
     <Card
       className={cn(
         "flex flex-col shadow-xl hover:shadow-2xl transition-all duration-300 ease-in-out break-inside-avoid-column transform hover:scale-[1.02] rounded-lg",
-        (isEditingContent || isEditingTermini) ? "ring-2 ring-primary ring-offset-2" : "" // visual cue for active editing
+        (isEditingContent || isEditingTermini) ? "ring-2 ring-primary ring-offset-2" : ""
       )}
-      style={{ backgroundColor: task.color }} // Dynamic background color
+      style={{ backgroundColor: task.color }} 
     >
       <CardHeader className="p-3 flex flex-row items-start justify-between space-y-0">
         <div className="flex items-center space-x-2" style={{ color: mainTextColor }}>
@@ -170,12 +160,24 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7" style={{ color: mainTextColor, borderColor: subtleTextColor /* if button has border */ }}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" style={{ color: mainTextColor, borderColor: subtleTextColor }}>
               <MoreVertical className="h-4 w-4" />
               <span className="sr-only">Opcions</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent
+            align="end"
+            onFocusOutside={(event) => {
+              if (colorPickerOpen && popoverColorContentRef.current && popoverColorContentRef.current.contains(event.target as Node)) {
+                event.preventDefault();
+              }
+            }}
+            onPointerDownOutside={(event) => {
+              if (colorPickerOpen && popoverColorContentRef.current && popoverColorContentRef.current.contains(event.target as Node)) {
+                event.preventDefault();
+              }
+            }}
+          >
             <DropdownMenuItem onSelect={() => setIsEditingContent(true)}>
               <Edit3 className="mr-2 h-4 w-4" />
               Editar Contingut
@@ -197,8 +199,11 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
                 </DropdownMenuItem>
               </PopoverTrigger>
               <PopoverContent 
+                ref={popoverColorContentRef}
                 className="w-auto p-2"
-                onOpenAutoFocus={(e) => e.preventDefault()} // Prevents focus shift issues
+                onOpenAutoFocus={(e) => e.preventDefault()}
+                side="right"
+                align="start"
               >
                 <div className="grid grid-cols-3 gap-2">
                   {POSTIT_COLOR_PALETTE.map((colorOpt) => (
@@ -231,7 +236,7 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
               ref={contentTextareaRef}
               value={editedContent}
               onChange={(e) => setEditedContent(e.target.value)}
-              onBlur={handleSaveContent} // Save on blur
+              onBlur={handleSaveContent} 
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveContent(); } else if (e.key === 'Escape') { setIsEditingContent(false); setEditedContent(task.content); } }}
               className="w-full h-full min-h-[80px] resize-none bg-transparent border-white/30 focus:border-primary rounded-md placeholder:text-white/50"
               style={{ color: mainTextColor }}
@@ -249,15 +254,14 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
       </CardContent>
 
       <CardFooter className="p-3 text-xs flex flex-col items-start space-y-2 border-t" style={{ borderColor: subtleTextColor, color: subtleTextColor }}>
-        {/* Status Selector */}
         <div className="w-full">
           <Select value={task.status || DEFAULT_TASK_STATUS} onValueChange={(value: TaskStatus) => handleStatusChange(value)}>
             <SelectTrigger 
               className="h-8 text-xs w-full rounded"
               style={{ 
-                backgroundColor: 'rgba(0,0,0,0.1)', // Slight dark overlay for readability
-                color: mainTextColor, // Ensure text is readable
-                borderColor: subtleTextColor // Use subtle border
+                backgroundColor: 'rgba(0,0,0,0.1)', 
+                color: mainTextColor, 
+                borderColor: subtleTextColor 
               }}
             >
               <SelectValue placeholder="Canviar estat" />
@@ -275,7 +279,6 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
           </Select>
         </div>
         
-        {/* Termini Raw Display & Edit */}
         <div className="pt-1 w-full">
             <p className="font-medium text-xs flex items-center mb-0.5" style={{ color: mainTextColor }}>
                 <Info size={14} className="mr-1.5 shrink-0" /> Condició Termini:
@@ -301,8 +304,6 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
             )}
         </div>
 
-
-        {/* Adjusted Date Display & Edit */}
         <div className="flex items-center text-xs pt-1 w-full justify-between" style={{ color: mainTextColor }}>
           <div className="flex items-center">
             <CalendarDays className="mr-1.5 h-3.5 w-3.5 shrink-0" />
@@ -325,7 +326,6 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
           </Popover>
         </div>
 
-        {/* Creation Date - less prominent */}
         <div className="text-[10px] opacity-80 pt-1" style={{ color: subtleTextColor }}>
           Creat: {formatDate(task.createdAt)}
         </div>
