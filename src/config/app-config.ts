@@ -15,8 +15,11 @@ export const HEADER_VARIANTS_CONTENT: string[] = [
   '#DOCUMENTS/ACCIONS', 
   'DOCUMENTS/ACCIONS', 
   '#DOCUMENT/ACCIONS', 
-  'DOCUMENT/ACCIONS',
-  'DOCUMENT' // Added based on CSV4 example
+  'DOCUMENT/ACCIONS', // Plural DOCUMENT, singular ACCIONS
+  'DOCUMENT', // Singular DOCUMENT
+  '#DOCUMENTS/ACCIO', // Plural DOCUMENTS, singular ACCIO (hypothetical but good to cover)
+  'DOCUMENTS/ACCIO',
+  'DOCUMENT/ACCIO', // Singular DOCUMENT, singular ACCIO
 ];
 export const HEADER_VARIANTS_DUE_DATE: string[] = ['#DATA A FER', 'DATA A FER'];
 
@@ -41,4 +44,3 @@ export const TASK_STATUSES: { value: TaskStatus; label: string; icon: React.Elem
 ];
 
 export const DEFAULT_TASK_STATUS: TaskStatus = "Pendent";
-
