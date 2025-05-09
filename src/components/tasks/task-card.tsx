@@ -38,9 +38,11 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
   const terminiTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [popoverCalendarOpen, setPopoverCalendarOpen] = useState(false);
+  
+  // Color picker states
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const popoverColorContentRef = useRef<HTMLDivElement>(null);
-
 
   const getCalendarSelectedDate = (): Date | undefined => {
     if (task.adjustedDate instanceof Date && isValid(task.adjustedDate)) {
@@ -49,7 +51,6 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
     const parsed = parseCustomDateString(String(task.adjustedDate));
     return parsed && isValid(parsed) ? parsed : undefined;
   };
-
 
   useEffect(() => {
     setEditedContent(task.content);
@@ -98,7 +99,8 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
 
   const handleColorChange = (color: string) => {
     onUpdateTask(task.id, { color });
-    setColorPickerOpen(false); 
+    setColorPickerOpen(false);
+    setDropdownOpen(false);
   };
 
   const handleStatusChange = (status: TaskStatus) => {
@@ -107,7 +109,6 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
   
   const currentStatusConfig = TASK_STATUSES.find(s => s.value === (task.status || DEFAULT_TASK_STATUS));
   const CurrentStatusIcon = currentStatusConfig?.icon || Info;
-
 
   const cardStyle = {
     backgroundColor: task.color,
@@ -118,7 +119,6 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
   const subtleTextColor = parseInt(task.color.substring(1), 16) > 0xffffff / 1.5 
     ? 'rgba(0, 0, 0, 0.65)' 
     : 'rgba(255, 255, 255, 0.75)';
-
 
   if (isPrintView) {
     const printCardStyle = {
@@ -162,72 +162,91 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
         )}
         {isPrintView && <div/>} {/* Placeholder to keep layout consistent if status is hidden */}
         
-        <DropdownMenu>
+        <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-7 w-7" style={{ color: mainTextColor, borderColor: subtleTextColor }}>
               <MoreVertical className="h-4 w-4" />
               <span className="sr-only">Opcions</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            onFocusOutside={(event) => {
-              // If the color picker is open AND the focus is going to/within the color picker, prevent dropdown close
-              if (colorPickerOpen && popoverColorContentRef.current && popoverColorContentRef.current.contains(event.target as Node)) {
-                event.preventDefault();
-              }
-            }}
-            onPointerDownOutside={(event) => {
-              // If the color picker is open AND the pointer down is inside the color picker, prevent dropdown close
-              if (colorPickerOpen && popoverColorContentRef.current && popoverColorContentRef.current.contains(event.target as Node)) {
-                event.preventDefault();
-              }
-            }}
-          >
-            <DropdownMenuItem onSelect={() => setIsEditingContent(true)}>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => {
+              setIsEditingContent(true);
+              setDropdownOpen(false);
+            }}>
               <Edit3 className="mr-2 h-4 w-4" />
               Editar Contingut
             </DropdownMenuItem>
-             <DropdownMenuItem onSelect={() => setIsEditingTermini(true)}>
+            <DropdownMenuItem onSelect={() => {
+              setIsEditingTermini(true);
+              setDropdownOpen(false);
+            }}>
               <Edit3 className="mr-2 h-4 w-4" />
               Editar Condició Termini
             </DropdownMenuItem>
-            <Popover open={colorPickerOpen} onOpenChange={setColorPickerOpen}>
-              <PopoverTrigger asChild>
-                <DropdownMenuItem
-                  onSelect={(e) => {
-                    e.preventDefault(); // Prevent default item behavior (closing dropdown)
-                    setColorPickerOpen(true); // Open the popover
+            
+            {/* Color picker handling */}
+            <div onMouseEnter={() => {
+              // Keep dropdown open when hovering this container
+              setColorPickerOpen(true);
+            }}>
+              <Popover open={colorPickerOpen} onOpenChange={(open) => {
+                setColorPickerOpen(open);
+                if (!open) {
+                  // Allow dropdown to close when color picker is closed
+                  setDropdownOpen(false);
+                }
+              }}>
+                <PopoverTrigger asChild>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault(); // Prevent default dropdown closing
+                      setColorPickerOpen(true);
+                    }}
+                  >
+                    <Palette className="mr-2 h-4 w-4" />
+                    Canviar Color
+                  </DropdownMenuItem>
+                </PopoverTrigger>
+                <PopoverContent 
+                  ref={popoverColorContentRef}
+                  className="w-auto p-2"
+                  side="right"
+                  align="start"
+                  onEscapeKeyDown={() => {
+                    setColorPickerOpen(false);
+                    setDropdownOpen(false);
+                  }}
+                  onPointerDownOutside={() => {
+                    setColorPickerOpen(false);
+                    setDropdownOpen(false);
+                  }}
+                  onInteractOutside={(e) => {
+                    e.preventDefault(); // Prevent closing on interact outside
                   }}
                 >
-                  <Palette className="mr-2 h-4 w-4" />
-                  Canviar Color
-                </DropdownMenuItem>
-              </PopoverTrigger>
-              <PopoverContent 
-                ref={popoverColorContentRef}
-                className="w-auto p-2"
-                onOpenAutoFocus={(e) => e.preventDefault()} // Prevent focus hijack
-                side="right" // Suggest popover to open on the right
-                align="start" // Align to the start of the trigger
-              >
-                <div className="grid grid-cols-3 gap-2">
-                  {POSTIT_COLOR_PALETTE.map((colorOpt) => (
-                    <Button
-                      key={colorOpt.value}
-                      variant="outline"
-                      size="icon"
-                      className={cn("h-8 w-8 rounded-full border-2", task.color === colorOpt.value ? "border-primary ring-2 ring-primary" : "border-gray-300")}
-                      style={{ backgroundColor: colorOpt.value }}
-                      onClick={() => handleColorChange(colorOpt.value)}
-                      aria-label={colorOpt.name}
-                    />
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
+                  <div className="grid grid-cols-3 gap-2">
+                    {POSTIT_COLOR_PALETTE.map((colorOpt) => (
+                      <Button
+                        key={colorOpt.value}
+                        variant="outline"
+                        size="icon"
+                        className={cn("h-8 w-8 rounded-full border-2", task.color === colorOpt.value ? "border-primary ring-2 ring-primary" : "border-gray-300")}
+                        style={{ backgroundColor: colorOpt.value }}
+                        onClick={() => handleColorChange(colorOpt.value)}
+                        aria-label={colorOpt.name}
+                      />
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+            
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => onDeleteTask(task.id)} className="text-destructive focus:text-destructive-foreground focus:bg-destructive">
+            <DropdownMenuItem onSelect={() => {
+              onDeleteTask(task.id);
+              setDropdownOpen(false);
+            }} className="text-destructive focus:text-destructive-foreground focus:bg-destructive">
               <Trash2 className="mr-2 h-4 w-4" />
               Eliminar
             </DropdownMenuItem>
@@ -341,4 +360,3 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
     </Card>
   );
 }
-

@@ -3,11 +3,22 @@ import type { TaskStatus } from '@/types';
 import { Circle, CheckCircle2, Loader2, Archive } from 'lucide-react';
 
 // --- CSV Header Configuration ---
-// These are the exact header strings (case-insensitive after trimming) expected in the CSV file.
-// They must start with '#' as per user requirement.
+// Primary expected header strings (case-insensitive after trimming).
+// Used for constructing new CSVs and as primary reference.
 export const APP_HEADER_TERMINI = '#TERMINI';
 export const APP_HEADER_CONTENT = '#DOCUMENTS/ACCIONS';
 export const APP_HEADER_DUE_DATE = '#DATA A FER';
+
+// Variants for flexible parsing. All will be converted to uppercase for matching.
+export const HEADER_VARIANTS_TERMINI: string[] = ['#TERMINI', 'TERMINI'];
+export const HEADER_VARIANTS_CONTENT: string[] = [
+  '#DOCUMENTS/ACCIONS', 
+  'DOCUMENTS/ACCIONS', 
+  '#DOCUMENT/ACCIONS', 
+  'DOCUMENT/ACCIONS'
+];
+export const HEADER_VARIANTS_DUE_DATE: string[] = ['#DATA A FER', 'DATA A FER'];
+
 
 // --- Task Configuration ---
 export const INITIAL_POSTIT_COLOR = "#E9F5E8"; // A slightly different soft green from theme for explicit setting. Theme --card is hsl(125, 50%, 95%) -> #E8F5E9
