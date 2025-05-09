@@ -111,33 +111,33 @@ body {
 @layer utilities {
   .print-a4-sheet {
     width: 210mm;
-    /* height: 297mm; /* Commenting out to allow content to flow over multiple pages if needed */
-    min-height: 297mm; /* Ensure at least one page height */
+    min-height: 297mm; 
     margin: auto;
-    padding: 10mm;
+    padding: 10mm; /* Standard A4 margins */
     box-sizing: border-box;
-    background-color: white; /* Ensure printable background */
+    background-color: white;
   }
 
   .postit-grid-print {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 5mm;
-    page-break-inside: auto; /* Allow the grid to break across pages */
+    grid-template-columns: repeat(3, 1fr); /* Changed to 3 columns */
+    gap: 8mm; /* Increased gap slightly for better separation */
+    page-break-inside: auto; 
   }
 
   .postit-print {
-    page-break-inside: avoid; /* Avoid breaking a single post-it across pages */
-    border: 1px solid #ccc; /* Light border for cutting guide */
-    padding: 0.5rem; /* Standardized padding (Tailwind p-2 is 0.5rem) */
-    overflow: hidden; /* Ensure content fits */
-    box-shadow: none; /* No shadows for printing */
-    display: flex; /* For controlling inner content layout */
-    flex-direction: column; /* Stack content vertically */
-    justify-content: space-between; /* Push footer to bottom */
-    min-height: 50mm; /* Minimum height for a rectangular post-it look */
-    height: 100%; /* Fill the grid cell height if rows are auto-sized by content */
-    background-color: var(--card); /* Default, will be overridden by task.color */
+    page-break-inside: avoid; 
+    /* border: 1px solid #ccc; Removed, border handled in component or via style */
+    padding: 0.6rem; /* Tailwind p-2.5, gives a bit more space */
+    overflow: hidden; 
+    box-shadow: none; 
+    display: flex; 
+    flex-direction: column; 
+    justify-content: space-between; 
+    min-height: 60mm; /* Slightly taller post-it for better content fit */
+    height: auto; /* Allow height to grow with content within grid cell */
+    border-radius: 0.25rem; /* Slight rounding for a softer look */
+    /* background-color will be set by inline style from task.color */
   }
 }
 
@@ -145,19 +145,15 @@ body {
   body {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
-    font-family: sans-serif; /* Use a common sans-serif for print */
-    background-color: white !important; /* Ensure body background is white for printing */
-    color: black !important; /* Ensure text is black */
+    font-family: sans-serif; 
+    background-color: white !important; 
+    color: black !important; 
   }
   .no-print {
     display: none !important;
   }
   .print-only {
-    /* This class is a marker for elements intended for print.
-       It should not force a display type like 'block !important'
-       as that overrides specific layout classes like 'postit-grid-print'.
-       If an element with .print-only was display:none for screen,
-       it will become visible here by not being display:none. */
+     /* This class is a marker. No forced display here. */
   }
   .print-container {
     margin: 0;
@@ -165,16 +161,16 @@ body {
     width: 100%;
   }
   main {
-    padding: 0 !important; /* Remove padding from main content area for print */
-  }
-  /* Ensure that postit-grid-print maintains its grid display during printing */
-  .postit-grid-print {
-    display: grid !important; /* Explicitly set grid display for printing */
+    padding: 0 !important; 
   }
 
-  /* Ensure post-it colors print correctly if they are set via inline styles */
+  .postit-grid-print {
+    display: grid !important; 
+  }
+
   .postit-print {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+    border: 1px solid #ddd !important; /* Ensure border prints for cutting */
   }
 }

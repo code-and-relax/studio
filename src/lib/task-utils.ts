@@ -1,5 +1,5 @@
 
-import { subDays, parse, isValid, format, parseISO } from 'date-fns';
+import { parse, isValid, format, parseISO } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 import type { Task } from '@/types';
 import { 
@@ -45,52 +45,38 @@ function parseCustomDateString(dateStr: string): Date | null {
 
 export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
   const fileText = await file.text();
-  const lines = fileText.split(/\r?\n/); // Split by newline, handling \r\n and \n
+  const lines = fileText.split(/\r?\n/);
 
   if (lines.length === 0) return [];
 
-  let terminiColIdx = -1;
-  let contentColIdx = -1;
-  let dueDateColIdx = -1;
+  let headerRowIndex = -1;
+  const csvHeaders: string[] = [];
 
-  let terminiRowIdx = -1;
-  let contentRowIdx = -1;
-  let dueDateRowIdx = -1;
-
-  // Find column indices and row indices for each header's first occurrence
+  // Find the header row and store its index and contents
   for (let i = 0; i < lines.length; i++) {
-    const rowCells = lines[i].split(',');
-    for (let j = 0; j < rowCells.length; j++) {
-      const cellContent = String(rowCells[j] || '').trim().toUpperCase();
-      if (cellContent === APP_HEADER_TERMINI && terminiColIdx === -1) {
-        terminiColIdx = j;
-        terminiRowIdx = i;
-      }
-      if (cellContent === APP_HEADER_CONTENT && contentColIdx === -1) {
-        contentColIdx = j;
-        contentRowIdx = i;
-      }
-      if (cellContent === APP_HEADER_DUE_DATE && dueDateColIdx === -1) {
-        dueDateColIdx = j;
-        dueDateRowIdx = i;
-      }
+    const rowCells = lines[i].split(',').map(cell => String(cell || '').trim().toUpperCase());
+    if (rowCells.includes(APP_HEADER_TERMINI) && rowCells.includes(APP_HEADER_CONTENT) && rowCells.includes(APP_HEADER_DUE_DATE)) {
+      headerRowIndex = i;
+      csvHeaders.push(...rowCells);
+      break;
     }
   }
+  
+  if (headerRowIndex === -1) {
+    throw new Error(`Missing required header row or columns. Ensure CSV contains a row with '${APP_HEADER_TERMINI}', '${APP_HEADER_CONTENT}', and '${APP_HEADER_DUE_DATE}'. All must start with '#'.`);
+  }
+  
+  const terminiIndex = csvHeaders.indexOf(APP_HEADER_TERMINI);
+  const contentIndex = csvHeaders.indexOf(APP_HEADER_CONTENT);
+  const dueDateIndex = csvHeaders.indexOf(APP_HEADER_DUE_DATE);
 
-  // Validate that all headers were found
-  if (terminiColIdx === -1) {
-    throw new Error(`Required header '${APP_HEADER_TERMINI}' not found in the CSV file.`);
-  }
-  if (contentColIdx === -1) {
-    throw new Error(`Required header '${APP_HEADER_CONTENT}' not found in the CSV file.`);
-  }
-  if (dueDateColIdx === -1) {
-    throw new Error(`Required header '${APP_HEADER_DUE_DATE}' not found in the CSV file.`);
+  // This check might be redundant if the headerRowIndex check above is comprehensive, but kept for safety.
+  if (terminiIndex === -1 || contentIndex === -1 || dueDateIndex === -1) {
+    throw new Error(`One or more required headers ('${APP_HEADER_TERMINI}', '${APP_HEADER_CONTENT}', '${APP_HEADER_DUE_DATE}') not found in the identified header row.`);
   }
   
   const tasks: Partial<Task>[] = [];
-  // Determine the starting row for data (first row after the last found header's row)
-  const dataStartRow = Math.max(terminiRowIdx, contentRowIdx, dueDateRowIdx) + 1;
+  const dataStartRow = headerRowIndex + 1;
 
   for (let i = dataStartRow; i < lines.length; i++) {
     const line = lines[i];
@@ -98,57 +84,54 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
       continue; 
     }
     
-    // This is a naive CSV split, doesn't handle commas within quoted fields.
+    // Basic CSV split. Does not handle commas within quoted fields robustly.
+    // For more complex CSVs, a proper CSV parsing library would be needed.
     const row = line.split(','); 
 
-    const maxIndexRequired = Math.max(terminiColIdx, contentColIdx, dueDateColIdx);
+    const maxIndexRequired = Math.max(terminiIndex, contentIndex, dueDateIndex);
     if (row.length <= maxIndexRequired) {
         console.warn(`Skipping row ${i + 1}: Not enough columns to access all required data. Line: "${line}"`);
         continue;
     }
 
-    const terminiDaysStrRaw = row[terminiColIdx] !== undefined ? String(row[terminiColIdx]).trim() : '';
-    const content = row[contentColIdx] !== undefined ? String(row[contentColIdx]).trim() : '';
-    const originalDueDateStr = row[dueDateColIdx] !== undefined ? String(row[dueDateColIdx]).trim() : '';
+    const terminiRaw = String(row[terminiIndex] || '').trim();
+    const content = String(row[contentIndex] || '').trim();
+    const originalDueDateStr = String(row[dueDateIndex] || '').trim();
     
     if (content === '') {
-        console.warn(`Skipping row ${i + 1} due to missing content in column ${contentColIdx + 1} (using header '${APP_HEADER_CONTENT}'). Line: "${line}"`);
+        console.warn(`Skipping row ${i + 1} due to missing content in column ${contentIndex + 1} (header '${APP_HEADER_CONTENT}'). Line: "${line}"`);
         continue;
     }
     
-    const terminiMatch = terminiDaysStrRaw.match(/\b(\d+)\b/);
-    const terminiDays = terminiMatch && terminiMatch[1] ? parseInt(terminiMatch[1], 10) : NaN;
-
-    if (isNaN(terminiDays)) {
-        console.warn(`Skipping row ${i + 1}: Could not parse termini days from "${terminiDaysStrRaw}" in column ${terminiColIdx + 1} (using header '${APP_HEADER_TERMINI}'). Line: "${line}"`);
+    if (terminiRaw === '') {
+        console.warn(`Skipping row ${i + 1} due to missing termini in column ${terminiIndex + 1} (header '${APP_HEADER_TERMINI}'). Line: "${line}"`);
         continue;
     }
 
     const originalDueDate = parseCustomDateString(originalDueDateStr);
     if (!originalDueDate) {
-      console.warn(`Skipping row ${i + 1}: Invalid or missing date in column ${dueDateColIdx + 1} (using header '${APP_HEADER_DUE_DATE}', value: "${originalDueDateStr}"). Line: "${line}"`);
+      console.warn(`Skipping row ${i + 1}: Invalid or missing date in column ${dueDateIndex + 1} (header '${APP_HEADER_DUE_DATE}', value: "${originalDueDateStr}"). Line: "${line}"`);
       continue;
     }
-
-    const adjustedDate = subDays(originalDueDate, terminiDays);
 
     tasks.push({
       content,
       originalDueDate,
-      terminiDays,
-      adjustedDate,
+      terminiRaw,
+      adjustedDate: originalDueDate, // Default adjustedDate to originalDueDate
     });
   }
   return tasks;
 };
 
 export const createNewTaskObject = (partialTask: Partial<Task>): Task => {
+  const originalDate = partialTask.originalDueDate || new Date();
   return {
     id: uuidv4(),
     content: partialTask.content || "Nova tasca",
-    originalDueDate: partialTask.originalDueDate || new Date(),
-    terminiDays: partialTask.terminiDays || 0,
-    adjustedDate: partialTask.adjustedDate || new Date(),
+    originalDueDate: originalDate,
+    terminiRaw: partialTask.terminiRaw || "N/A",
+    adjustedDate: partialTask.adjustedDate || originalDate, // Ensure adjustedDate is set
     status: partialTask.status || DEFAULT_TASK_STATUS,
     color: partialTask.color || INITIAL_POSTIT_COLOR,
     createdAt: new Date(),
@@ -160,18 +143,19 @@ export const formatDate = (date: Date | string | undefined | null): string => {
   try {
     let d: Date;
     if (typeof date === 'string') {
-      // Try parsing as ISO string first
       d = parseISO(date);
       if (!isValid(d)) {
-        const customParsedDate = parseCustomDateString(date); // handles DD/MM/YY and DD/MM/YYYY
+        const customParsedDate = parseCustomDateString(date); 
         if (customParsedDate && isValid(customParsedDate)) {
           d = customParsedDate;
         } else {
-          return 'Data invàlida';
+          // Attempt simple Date constructor as last resort for already formatted strings like "YYYY-MM-DDTHH:mm:ss.sssZ"
+          d = new Date(date); 
+          if (!isValid(d)) return 'Data invàlida';
         }
       }
     } else {
-      d = date; // It's already a Date object
+      d = date; 
     }
     
     if (!isValid(d)) {

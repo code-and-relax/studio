@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CalendarDays, Edit3, Palette, Trash2, MoreVertical, GripVertical, Circle } from 'lucide-react'; // Added Circle icon
+import { CalendarDays, Edit3, Palette, Trash2, MoreVertical, GripVertical, Circle, Info } from 'lucide-react';
 import { formatDate } from '@/lib/task-utils';
 import { POSTIT_COLOR_PALETTE, TASK_STATUSES } from '@/config/app-config';
 import { cn } from '@/lib/utils';
@@ -36,7 +36,7 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    setEditedContent(task.content); // Sync with prop changes
+    setEditedContent(task.content); 
   }, [task.content]);
 
   useEffect(() => {
@@ -65,16 +65,40 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
 
   const cardStyle = {
     backgroundColor: task.color,
-    color: task.color && task.color.toLowerCase() > '#aaaaaa' ? 'var(--foreground)' : 'var(--card-foreground)',
+    // Basic contrast check, might need a more sophisticated one for accessibility
+    color: parseInt(task.color.substring(1), 16) > 0xffffff / 2 ? 'hsl(var(--card-foreground))' : '#ffffff',
   };
   
+  const textColorStyle = {
+    color: cardStyle.color === '#ffffff' ? 'hsl(var(--foreground))' : cardStyle.color,
+  };
+  
+  const mutedTextColorStyle = {
+    color: cardStyle.color === '#ffffff' ? 'hsl(var(--muted-foreground))' : 'rgba(255, 255, 255, 0.7)',
+  };
+
+
   if (isPrintView) {
+    // Ensure cardStyle for print view also considers text contrast
+    const printCardStyle = {
+      backgroundColor: task.color,
+      color: parseInt(task.color.substring(1), 16) > 0xffffff / 1.5 ? 'black' : 'white', // Simplified for print
+      border: '1px solid #ddd', // Add a light border for cutting guide
+    };
+    const printMutedColor = parseInt(task.color.substring(1), 16) > 0xffffff / 1.5 ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)';
+
+
     return (
-      <div className="postit-print break-inside-avoid" style={cardStyle}>
-        <p className="text-xs font-semibold mb-1 break-words hyphens-auto">{task.content}</p>
-        <div className="mt-auto text-xs" style={{color: task.color && task.color.toLowerCase() > '#aaaaaa' ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)' }}> {/* Adjusted text color for print based on background for better legibility */}
-          <p>Data Ajustada: {formatDate(task.adjustedDate)}</p>
-          <p>Estat: {TASK_STATUSES.find(s => s.value === task.status)?.label || task.status}</p>
+      <div className="postit-print break-inside-avoid flex flex-col justify-between" style={printCardStyle}>
+        <div>
+          <h3 className="text-sm font-semibold mb-1.5 break-words hyphens-auto leading-tight" style={{ color: printCardStyle.color }}>
+            {task.content}
+          </h3>
+        </div>
+        <div className="mt-auto text-[10px] space-y-0.5" style={{ color: printMutedColor }}>
+          <p><span className="font-medium">Termini:</span> {task.terminiRaw}</p>
+          <p><span className="font-medium">Data Límit:</span> {formatDate(task.originalDueDate)}</p>
+          <p><span className="font-medium">Estat:</span> {TASK_STATUSES.find(s => s.value === task.status)?.label || task.status}</p>
         </div>
       </div>
     );
@@ -83,13 +107,13 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
   return (
     <Card
       className={cn(
-        "flex flex-col shadow-lg hover:shadow-xl transition-shadow duration-200 break-inside-avoid-column",
+        "flex flex-col shadow-xl hover:shadow-2xl transition-all duration-300 ease-in-out break-inside-avoid-column transform hover:scale-[1.02] rounded-lg",
         isEditing ? "ring-2 ring-primary ring-offset-2" : ""
       )}
       style={cardStyle}
     >
       <CardHeader className="p-3 flex flex-row items-start justify-between space-y-0">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2" style={textColorStyle}>
           <CurrentStatusIcon className="h-5 w-5" />
           <span className="text-sm font-medium">
             {TASK_STATUSES.find(s => s.value === task.status)?.label || task.status}
@@ -97,7 +121,7 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7">
+            <Button variant="ghost" size="icon" className="h-7 w-7" style={textColorStyle}>
               <MoreVertical className="h-4 w-4" />
               <span className="sr-only">Opcions</span>
             </Button>
@@ -121,7 +145,7 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
                         key={colorOpt.value}
                         variant="outline"
                         size="icon"
-                        className={cn("h-8 w-8 rounded-full border-2", task.color === colorOpt.value ? "border-primary ring-2 ring-primary" : "border-transparent")}
+                        className={cn("h-8 w-8 rounded-full border-2", task.color === colorOpt.value ? "border-primary ring-2 ring-primary" : "border-gray-300")}
                         style={{ backgroundColor: colorOpt.value }}
                         onClick={() => handleColorChange(colorOpt.value)}
                         aria-label={colorOpt.name}
@@ -146,19 +170,19 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
             onChange={(e) => setEditedContent(e.target.value)}
             onBlur={handleSaveContent}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveContent(); } else if (e.key === 'Escape') { setIsEditing(false); setEditedContent(task.content);}}}
-            className="w-full h-full min-h-[100px] resize-none bg-transparent border-muted focus:border-primary"
-            style={{ color: 'inherit' }}
+            className="w-full h-full min-h-[100px] resize-none bg-transparent border-muted focus:border-primary rounded-md"
+            style={textColorStyle}
           />
         ) : (
-          <p className="text-sm whitespace-pre-wrap break-words hyphens-auto cursor-pointer" onClick={() => setIsEditing(true)}>
+          <p className="text-sm whitespace-pre-wrap break-words hyphens-auto cursor-pointer min-h-[100px]" onClick={() => setIsEditing(true)} style={textColorStyle}>
             {task.content}
           </p>
         )}
       </CardContent>
-      <CardFooter className="p-3 text-xs flex flex-col items-start space-y-1">
+      <CardFooter className="p-3 text-xs flex flex-col items-start space-y-2 border-t border-white/20" style={mutedTextColorStyle}>
          <div className="w-full">
           <Select value={task.status} onValueChange={(value: TaskStatus) => handleStatusChange(value)}>
-            <SelectTrigger className="h-8 text-xs w-full bg-background/30 hover:bg-background/50 backdrop-blur-sm">
+            <SelectTrigger className="h-8 text-xs w-full bg-black/10 hover:bg-black/20 backdrop-blur-sm border-white/30 rounded" style={textColorStyle}>
               <SelectValue placeholder="Canviar estat" />
             </SelectTrigger>
             <SelectContent>
@@ -173,15 +197,28 @@ export function TaskCard({ task, onUpdateTask, onDeleteTask, isPrintView = false
             </SelectContent>
           </Select>
         </div>
-        <div className="flex items-center" style={{color: cardStyle.color === 'var(--foreground)' ? 'hsl(var(--muted-foreground))' : 'rgba(0,0,0,0.6)' }}>
-          <CalendarDays className="mr-1 h-3 w-3" />
+        
+        <div className="pt-1">
+          <p className="font-medium text-xs flex items-center" style={textColorStyle}>
+            <Info size={14} className="mr-1.5 shrink-0" /> Termini:
+          </p>
+          <p className="pl-[22px] text-[11px] leading-tight">{task.terminiRaw}</p>
+        </div>
+
+        <div className="flex items-center text-xs">
+          <CalendarDays className="mr-1.5 h-3.5 w-3.5 shrink-0" />
+          Data Límit: {formatDate(task.originalDueDate)}
+        </div>
+        {/*
+        <div className="flex items-center text-xs" style={mutedTextColorStyle}>
+          <CalendarDays className="mr-1.5 h-3.5 w-3.5 shrink-0" />
           Data Ajustada: {formatDate(task.adjustedDate)}
         </div>
-        <div className="text-xs" style={{color: cardStyle.color === 'var(--foreground)' ? 'hsl(var(--muted-foreground))' : 'rgba(0,0,0,0.6)' }}>
-          Data Original: {formatDate(task.originalDueDate)} (Termini: {task.terminiDays} dies)
+        */}
+        <div className="text-[10px] opacity-80 pt-1">
+          Creat: {formatDate(task.createdAt)}
         </div>
       </CardFooter>
     </Card>
   );
 }
-
