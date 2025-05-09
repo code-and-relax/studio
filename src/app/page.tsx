@@ -8,7 +8,7 @@ import { DataImporter } from '@/components/controls/data-importer';
 import { SearchInput } from '@/components/controls/search-input';
 import { TaskBoard } from '@/components/tasks/task-board';
 import { useToast } from "@/hooks/use-toast";
-import { exportTasksToCSV } from '@/lib/task-utils';
+import { exportTasksToCSV, createNewTaskObject } from '@/lib/task-utils';
 import { isValid } from 'date-fns'; 
 import {
   AlertDialog,
@@ -20,6 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { AddTaskForm, type AddTaskFormValues } from '@/components/tasks/add-task-form';
 
 const TASKS_STORAGE_KEY = 'academiaBoardTasks';
 
@@ -29,6 +30,7 @@ export default function AcademiaBoardPage() {
   const [isClient, setIsClient] = useState(false);
   const { toast } = useToast();
   const [isClearConfirmDialogOpen, setIsClearConfirmDialogOpen] = useState(false);
+  const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -74,7 +76,7 @@ export default function AcademiaBoardPage() {
         }
       }
     }
-  }, [toast]); // Added toast to dependency array as it's used in the effect
+  }, [toast]); 
 
   useEffect(() => {
     if (isClient && typeof window !== 'undefined') {
@@ -82,7 +84,6 @@ export default function AcademiaBoardPage() {
         localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
       } catch (error) {
         console.error("Error saving tasks to localStorage:", error);
-        // Optionally, inform user if storage fails
       }
     }
   }, [tasks, isClient]);
@@ -171,18 +172,16 @@ export default function AcademiaBoardPage() {
   const handlePrint = () => {
     if (isClient && typeof window !== 'undefined') {
       try {
-        // Ensure latest tasks are saved before printing
         localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
       } catch (error) {
         console.error("Error saving tasks to localStorage before printing:", error);
         toast({ variant: 'destructive', title: "Error d'impressió", description: "No s'ha pogut desar les dades per imprimir." });
-        return; // Stop if saving fails
+        return; 
       }
 
       const printWindow = window.open('/print', '_blank');
       if (printWindow) {
         printWindow.onload = () => {
-          // A short delay can help ensure all content and styles are loaded
           setTimeout(() => {
             try {
               printWindow.print();
@@ -190,7 +189,7 @@ export default function AcademiaBoardPage() {
               console.error("Error calling printWindow.print():", e);
               toast({ variant: 'destructive', title: "Error d'impressió", description: "No s'ha pogut iniciar la impressió." });
             }
-          }, 250); // Reduced delay again, might need adjustment based on content complexity
+          }, 250); 
         };
       } else {
         toast({ variant: 'destructive', title: "Error d'impressió", description: "No s'ha pogut obrir la finestra d'impressió. Comprova els permisos del navegador." });
@@ -198,6 +197,29 @@ export default function AcademiaBoardPage() {
     } else {
        toast({ variant: 'destructive', title: "Error", description: "La impressió no està disponible en aquest moment." });
     }
+  };
+
+  const handleOpenAddTaskDialog = () => {
+    setIsAddTaskDialogOpen(true);
+  };
+
+  const handleManualTaskSubmit = (values: AddTaskFormValues) => {
+    const newTaskPartial: Partial<Task> = {
+      content: values.content,
+      terminiRaw: values.terminiRaw || "N/A",
+      originalDueDate: values.adjustedDate ? values.adjustedDate : "Data no especificada",
+      adjustedDate: values.adjustedDate ? values.adjustedDate : "Data no especificada",
+      status: values.status,
+      color: values.color,
+    };
+  
+    const newTask = createNewTaskObject(newTaskPartial);
+    setTasks(prevTasks => [newTask, ...prevTasks]); // Add to the beginning
+    toast({
+      title: "Tasca afegida",
+      description: "La nova tasca s'ha afegit correctament.",
+    });
+    setIsAddTaskDialogOpen(false); // Close dialog from here
   };
 
   const filteredTasks = useMemo(() => {
@@ -235,6 +257,7 @@ export default function AcademiaBoardPage() {
             onTasksReplaced={handleTasksReplaced}
             onDownloadCSV={handleDownloadCSV}
             onClearAllTasksRequested={requestClearAllTasks}
+            onOpenAddTaskDialog={handleOpenAddTaskDialog} // Pass new handler
           />
           <SearchInput searchTerm={searchTerm} onSearchChange={setSearchTerm} />
           <TaskBoard
@@ -260,6 +283,11 @@ export default function AcademiaBoardPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <AddTaskForm
+        isOpen={isAddTaskDialogOpen}
+        onOpenChange={setIsAddTaskDialogOpen}
+        onSubmit={handleManualTaskSubmit}
+      />
     </div>
   );
 }
