@@ -1,4 +1,3 @@
-
 import { parse, isValid, format, parseISO } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 import type { Task } from '@/types';
@@ -67,56 +66,51 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
   if (lines.length === 0) return [];
 
   let headerRowIndex = -1;
-  let terminiIndex = -1;
-  let contentIndex = -1;
-  let dueDateIndex = -1;
-
-  const MAX_HEADER_SCAN_LINES = 20; // Scan up to 20 lines for headers
+  let csvHeaders: string[] = [];
+  const MAX_HEADER_SCAN_LINES = 20; 
 
   const VARIANTS_TERMINI_UPPER = HEADER_VARIANTS_TERMINI.map(s => s.toUpperCase());
   const VARIANTS_CONTENT_UPPER = HEADER_VARIANTS_CONTENT.map(s => s.toUpperCase());
   const VARIANTS_DUE_DATE_UPPER = HEADER_VARIANTS_DUE_DATE.map(s => s.toUpperCase());
 
+  let foundTerminiHeader: string | undefined;
+  let foundContentHeader: string | undefined;
+  let foundDueDateHeader: string | undefined;
+
   for (let i = 0; i < Math.min(lines.length, MAX_HEADER_SCAN_LINES); i++) {
     const lineContent = lines[i];
-    if (lineContent.split(',').every(cell => cell.trim() === '')) continue; // Skip fully empty lines
+    if (lineContent.split(',').every(cell => cell.trim() === '')) continue; 
 
     const currentCellsUpper = lineContent.split(',').map(cell => String(cell || '').trim().toUpperCase());
     
-    let tempTerminiIndex = -1;
-    let tempContentIndex = -1;
-    let tempDueDateIndex = -1;
+    const lineHasTermini = VARIANTS_TERMINI_UPPER.some(h => currentCellsUpper.includes(h));
+    const lineHasContent = VARIANTS_CONTENT_UPPER.some(h => currentCellsUpper.includes(h));
+    const lineHasDueDate = VARIANTS_DUE_DATE_UPPER.some(h => currentCellsUpper.includes(h));
 
-    currentCellsUpper.forEach((cell, idx) => {
-        if (tempTerminiIndex === -1 && VARIANTS_TERMINI_UPPER.includes(cell)) {
-            tempTerminiIndex = idx;
-        }
-        if (tempContentIndex === -1 && VARIANTS_CONTENT_UPPER.includes(cell)) {
-            tempContentIndex = idx;
-        }
-        if (tempDueDateIndex === -1 && VARIANTS_DUE_DATE_UPPER.includes(cell)) {
-            tempDueDateIndex = idx;
-        }
-    });
+    if (lineHasTermini && lineHasContent && lineHasDueDate) {
+      headerRowIndex = i;
+      csvHeaders = currentCellsUpper; 
 
-    if (tempTerminiIndex !== -1 && tempContentIndex !== -1 && tempDueDateIndex !== -1) {
-        headerRowIndex = i;
-        terminiIndex = tempTerminiIndex;
-        contentIndex = tempContentIndex;
-        dueDateIndex = tempDueDateIndex;
-        break; 
+      foundTerminiHeader = VARIANTS_TERMINI_UPPER.find(h => csvHeaders.includes(h));
+      foundContentHeader = VARIANTS_CONTENT_UPPER.find(h => csvHeaders.includes(h));
+      foundDueDateHeader = VARIANTS_DUE_DATE_UPPER.find(h => csvHeaders.includes(h));
+      break; 
     }
   }
   
-  if (headerRowIndex === -1) {
-    const primaryConcepts = [
-        HEADER_VARIANTS_TERMINI[0], 
-        HEADER_VARIANTS_CONTENT[0], 
-        HEADER_VARIANTS_DUE_DATE[0]  
+  if (headerRowIndex === -1 || !foundTerminiHeader || !foundContentHeader || !foundDueDateHeader) {
+    const exampleHeaders = [
+        HEADER_VARIANTS_TERMINI[0], // Show the '#' prefixed version if available, else the first variant
+        HEADER_VARIANTS_CONTENT[0],
+        HEADER_VARIANTS_DUE_DATE[0]
     ];
-    throw new Error(`Missing required header row or columns. Ensure your CSV contains a single row with headers for concepts: '${primaryConcepts.join("', '")}'. Parser checks for variations (e.g., with/without '#', minor name differences like 'DOCUMENT/ACCIONS').`);
+    throw new Error(`Missing required header row or columns. Ensure CSV contains headers for 'TERMINI', 'DOCUMENTS/ACCIONS' (or 'DOCUMENT/ACCIONS'), and 'DATA A FER'. For example: '${exampleHeaders.join("', '")}'. Common variations (e.g., with/without '#') are checked.`);
   }
   
+  const terminiIndex = csvHeaders.indexOf(foundTerminiHeader);
+  const contentIndex = csvHeaders.indexOf(foundContentHeader);
+  const dueDateIndex = csvHeaders.indexOf(foundDueDateHeader);
+
   const dataStartRow = headerRowIndex + 1;
 
   if (dataStartRow >= lines.length) {
@@ -143,7 +137,7 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
     const content = String(row[contentIndex] || '').trim();
     const originalDueDateStr = String(row[dueDateIndex] || '').trim();
     
-    if (content === '') { // If content is empty, skip task creation
+    if (content === '') { 
       console.warn(`Skipping row ${i + 1} due to empty content. Line: "${line}"`);
       continue;
     }
@@ -159,9 +153,9 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
     
     tasks.push({
       content,
-      originalDueDate: taskDueDateField, // Store the original string or parsed date
+      originalDueDate: taskDueDateField,
       terminiRaw, 
-      adjustedDate: taskDueDateField, // Initially same as originalDueDate
+      adjustedDate: taskDueDateField, 
     });
   }
   return tasks;
@@ -169,7 +163,7 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
 
 export const createNewTaskObject = (partialTask: Partial<Task>): Task => {
   const now = new Date();
-  const id = partialTask.id || uuidv4(); // Use provided ID or generate new
+  const id = partialTask.id || uuidv4(); 
 
   const determineDateValue = (dateInput: Date | string | undefined): Date | string => {
     if (dateInput instanceof Date && isValid(dateInput)) {
@@ -184,7 +178,6 @@ export const createNewTaskObject = (partialTask: Partial<Task>): Task => {
   };
 
   const finalOriginalDueDate = determineDateValue(partialTask.originalDueDate);
-  // If adjustedDate is not provided in partialTask, it defaults to finalOriginalDueDate
   const finalAdjustedDate = determineDateValue(partialTask.adjustedDate ?? finalOriginalDueDate);
   
   const terminiValue = typeof partialTask.terminiRaw === 'string' 
@@ -252,14 +245,12 @@ function escapeCsvCell(cellData: any): string {
 }
 
 export const exportTasksToCSV = (tasks: Task[]): string => {
-  // Use the primary APP_HEADER constants for export consistency
   const headerLine = [APP_HEADER_TERMINI, APP_HEADER_CONTENT, APP_HEADER_DUE_DATE].join(',');
   
   const rows = tasks.map(task => {
     const termini = escapeCsvCell(task.terminiRaw);
     const content = escapeCsvCell(task.content);
     
-    // For export, use originalDueDate. If it's a Date, format it. If string, use as is.
     const dueDateExportValue = task.originalDueDate instanceof Date && isValid(task.originalDueDate)
                          ? format(task.originalDueDate, 'dd/MM/yyyy') 
                          : (typeof task.originalDueDate === 'string' ? task.originalDueDate : '');
