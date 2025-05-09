@@ -52,13 +52,13 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
   let headerRowIndex = -1;
   const csvHeaders: string[] = [];
 
-  // Find the header row and store its index and contents
   for (let i = 0; i < lines.length; i++) {
     const rowCells = lines[i].split(',').map(cell => String(cell || '').trim().toUpperCase());
+    // Check if all required headers are present in this row
     if (rowCells.includes(APP_HEADER_TERMINI) && rowCells.includes(APP_HEADER_CONTENT) && rowCells.includes(APP_HEADER_DUE_DATE)) {
       headerRowIndex = i;
-      csvHeaders.push(...rowCells);
-      break;
+      csvHeaders.push(...rowCells); // Store the found headers
+      break; 
     }
   }
   
@@ -70,9 +70,9 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
   const contentIndex = csvHeaders.indexOf(APP_HEADER_CONTENT);
   const dueDateIndex = csvHeaders.indexOf(APP_HEADER_DUE_DATE);
 
-  // This check might be redundant if the headerRowIndex check above is comprehensive, but kept for safety.
+  // This check is important as indexOf could return -1 even if headerRowIndex was found, if the headers array got mangled.
   if (terminiIndex === -1 || contentIndex === -1 || dueDateIndex === -1) {
-    throw new Error(`One or more required headers ('${APP_HEADER_TERMINI}', '${APP_HEADER_CONTENT}', '${APP_HEADER_DUE_DATE}') not found in the identified header row.`);
+    throw new Error(`One or more required headers ('${APP_HEADER_TERMINI}', '${APP_HEADER_CONTENT}', '${APP_HEADER_DUE_DATE}') not found in the identified header row. Indices: Termini=${terminiIndex}, Content=${contentIndex}, DueDate=${dueDateIndex}.`);
   }
   
   const tasks: Partial<Task>[] = [];
@@ -84,13 +84,11 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
       continue; 
     }
     
-    // Basic CSV split. Does not handle commas within quoted fields robustly.
-    // For more complex CSVs, a proper CSV parsing library would be needed.
     const row = line.split(','); 
 
     const maxIndexRequired = Math.max(terminiIndex, contentIndex, dueDateIndex);
     if (row.length <= maxIndexRequired) {
-        console.warn(`Skipping row ${i + 1}: Not enough columns to access all required data. Line: "${line}"`);
+        console.warn(`Skipping row ${i + 1}: Not enough columns to access all required data. Expected at least ${maxIndexRequired + 1} columns based on header indices, got ${row.length}. Line: "${line}"`);
         continue;
     }
 
@@ -98,6 +96,12 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
     const content = String(row[contentIndex] || '').trim();
     const originalDueDateStr = String(row[dueDateIndex] || '').trim();
     
+    if (content === '' && terminiRaw === '' && originalDueDateStr === '') {
+      // Skip completely empty rows based on the three key fields
+      console.warn(`Skipping row ${i+1} as it appears to be empty or irrelevant.`);
+      continue;
+    }
+
     if (content === '') {
         console.warn(`Skipping row ${i + 1} due to missing content in column ${contentIndex + 1} (header '${APP_HEADER_CONTENT}'). Line: "${line}"`);
         continue;
@@ -118,7 +122,7 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
       content,
       originalDueDate,
       terminiRaw,
-      adjustedDate: originalDueDate, // Default adjustedDate to originalDueDate
+      adjustedDate: originalDueDate, 
     });
   }
   return tasks;
@@ -131,7 +135,7 @@ export const createNewTaskObject = (partialTask: Partial<Task>): Task => {
     content: partialTask.content || "Nova tasca",
     originalDueDate: originalDate,
     terminiRaw: partialTask.terminiRaw || "N/A",
-    adjustedDate: partialTask.adjustedDate || originalDate, // Ensure adjustedDate is set
+    adjustedDate: partialTask.adjustedDate || originalDate, 
     status: partialTask.status || DEFAULT_TASK_STATUS,
     color: partialTask.color || INITIAL_POSTIT_COLOR,
     createdAt: new Date(),
@@ -143,18 +147,18 @@ export const formatDate = (date: Date | string | undefined | null): string => {
   try {
     let d: Date;
     if (typeof date === 'string') {
-      d = parseISO(date);
-      if (!isValid(d)) {
+      d = parseISO(date); // Try ISO first (common for JS Date.toISOString())
+      if (!isValid(d)) { // If not ISO, try custom parsing
         const customParsedDate = parseCustomDateString(date); 
         if (customParsedDate && isValid(customParsedDate)) {
           d = customParsedDate;
         } else {
-          // Attempt simple Date constructor as last resort for already formatted strings like "YYYY-MM-DDTHH:mm:ss.sssZ"
+          // Fallback for other string formats that new Date() might handle
           d = new Date(date); 
           if (!isValid(d)) return 'Data invàlida';
         }
       }
-    } else {
+    } else { // If it's already a Date object
       d = date; 
     }
     
@@ -168,3 +172,32 @@ export const formatDate = (date: Date | string | undefined | null): string => {
   }
 };
 
+function escapeCsvCell(cellData: any): string {
+  if (cellData == null) return ''; // Handle null or undefined as empty string
+  
+  let cell = '';
+  if (cellData instanceof Date) {
+    cell = formatDate(cellData); 
+  } else {
+    cell = String(cellData);
+  }
+
+  if (cell.includes(',') || cell.includes('\n') || cell.includes('"')) {
+    cell = `"${cell.replace(/"/g, '""')}"`;
+  }
+  return cell;
+}
+
+export const exportTasksToCSV = (tasks: Task[]): string => {
+  const headers = [APP_HEADER_TERMINI, APP_HEADER_CONTENT, APP_HEADER_DUE_DATE].join(',');
+  
+  const rows = tasks.map(task => {
+    const termini = escapeCsvCell(task.terminiRaw);
+    const content = escapeCsvCell(task.content);
+    // For CSV export, use adjustedDate as it reflects user modifications.
+    const dueDate = escapeCsvCell(task.adjustedDate); 
+    return [termini, content, dueDate].join(',');
+  });
+
+  return [headers, ...rows].join('\n');
+};

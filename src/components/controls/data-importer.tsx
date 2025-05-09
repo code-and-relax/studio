@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { UploadCloud, FileText } from 'lucide-react';
+import { UploadCloud, FileText, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Task } from '@/types';
 import { parseTaskFile, createNewTaskObject } from '@/lib/task-utils'; 
@@ -14,9 +14,11 @@ import { APP_HEADER_TERMINI, APP_HEADER_CONTENT, APP_HEADER_DUE_DATE } from '@/c
 
 interface DataImporterProps {
   onTasksImported: (tasks: Task[]) => void;
+  onTasksReplaced: (tasks: Task[]) => void;
+  onDownloadCSV: () => void;
 }
 
-export function DataImporter({ onTasksImported }: DataImporterProps) {
+export function DataImporter({ onTasksImported, onTasksReplaced, onDownloadCSV }: DataImporterProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -24,8 +26,7 @@ export function DataImporter({ onTasksImported }: DataImporterProps) {
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const selectedFile = event.target.files[0];
-      // Check for CSV MIME types or .csv extension
-      if (selectedFile.type === 'text/csv' || selectedFile.name.endsWith('.csv') || selectedFile.type === 'application/vnd.ms-excel') { // Added application/vnd.ms-excel for some CSVs
+      if (selectedFile.type === 'text/csv' || selectedFile.name.endsWith('.csv') || selectedFile.type === 'application/vnd.ms-excel') {
         setFile(selectedFile);
       } else {
         toast({
@@ -34,12 +35,12 @@ export function DataImporter({ onTasksImported }: DataImporterProps) {
           description: "Si us plau, selecciona un fitxer CSV.",
         });
         setFile(null);
-        event.target.value = ""; // Reset file input
+        event.target.value = ""; 
       }
     }
   };
 
-  const handleImport = async () => {
+  const handleImport = async (replaceExisting: boolean = false) => {
     if (!file) {
       toast({
         title: "Cap fitxer seleccionat",
@@ -52,9 +53,15 @@ export function DataImporter({ onTasksImported }: DataImporterProps) {
     try {
       const partialTasks = await parseTaskFile(file); 
       const newTasks = partialTasks.map(pt => createNewTaskObject(pt));
-      onTasksImported(newTasks);
+      
+      if (replaceExisting) {
+        onTasksReplaced(newTasks);
+      } else {
+        onTasksImported(newTasks);
+      }
+
       toast({
-        title: "Importació completada",
+        title: `Importació completada ${replaceExisting ? '(reemplaçant)' : '(afegint)'}`,
         description: `${newTasks.length} tasques importades correctament des del CSV.`,
       });
       setFile(null); 
@@ -78,10 +85,10 @@ export function DataImporter({ onTasksImported }: DataImporterProps) {
       <CardHeader>
         <CardTitle className="flex items-center">
           <UploadCloud className="mr-2 h-6 w-6 text-primary" />
-          Importar Tasques des de CSV
+          Gestionar Tasques (CSV)
         </CardTitle>
         <CardDescription>
-          Puja un fitxer CSV. Les capçaleres de columna requerides són '{APP_HEADER_TERMINI}', '{APP_HEADER_CONTENT}', i '{APP_HEADER_DUE_DATE}' (han de començar amb '#').
+          Puja un fitxer CSV per afegir o reemplaçar tasques. Les capçaleres requerides són '{APP_HEADER_TERMINI}', '{APP_HEADER_CONTENT}', i '{APP_HEADER_DUE_DATE}' (han de començar amb '#'). També pots descarregar les tasques actuals.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -95,8 +102,17 @@ export function DataImporter({ onTasksImported }: DataImporterProps) {
             <span>{file.name}</span>
           </div>
         )}
-        <Button onClick={handleImport} disabled={!file || isLoading} className="w-full sm:w-auto">
-          {isLoading ? 'Important...' : 'Importar Tasques (CSV)'}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button onClick={() => handleImport(false)} disabled={!file || isLoading} className="flex-1">
+            {isLoading ? 'Important...' : 'Afegir Tasques (CSV)'}
+          </Button>
+          <Button onClick={() => handleImport(true)} disabled={!file || isLoading} variant="outline" className="flex-1">
+            {isLoading ? 'Reemplaçant...' : 'Reemplaçar amb CSV'}
+          </Button>
+        </div>
+        <Button onClick={onDownloadCSV} variant="secondary" className="w-full">
+          <Download className="mr-2 h-4 w-4" />
+          Descarregar Tasques (CSV)
         </Button>
       </CardContent>
     </Card>
