@@ -1,4 +1,3 @@
-
 import { v4 as uuidv4 } from 'uuid';
 import type { Task, TaskStatus } from '@/types';
 import { 
@@ -204,7 +203,7 @@ export const parseTaskFile = async (file: File): Promise<Partial<Task>[]> => {
  */
 export const createNewTaskObject = (partialTask: Partial<Task>): Task => {
   const now = new Date();
-  return {
+  const task: Task = {
     id: partialTask.id || uuidv4(),
     content: partialTask.content || "Nova Tasca",
     terminiRaw: partialTask.terminiRaw || "N/A",
@@ -213,7 +212,18 @@ export const createNewTaskObject = (partialTask: Partial<Task>): Task => {
     status: partialTask.status || DEFAULT_TASK_STATUS,
     color: partialTask.color || INITIAL_POSTIT_COLOR,
     createdAt: partialTask.createdAt || now,
+    inicio: partialTask.inicio,
+    convocatoria: partialTask.convocatoria,
+    accio: partialTask.accio,
+    cp: partialTask.cp,
+    nomAccio: partialTask.nomAccio,
+    centro: partialTask.centro,
   };
+  // Include uploaded image if provided
+  if (partialTask.logoFile) {
+    task.logoFile = partialTask.logoFile;
+  }
+  return task;
 };
 
 
