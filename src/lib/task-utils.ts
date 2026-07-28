@@ -212,17 +212,19 @@ export const createNewTaskObject = (partialTask: Partial<Task>): Task => {
     status: partialTask.status || DEFAULT_TASK_STATUS,
     color: partialTask.color || INITIAL_POSTIT_COLOR,
     createdAt: partialTask.createdAt || now,
-    inicio: partialTask.inicio,
-    convocatoria: partialTask.convocatoria,
-    accio: partialTask.accio,
-    cp: partialTask.cp,
-    nomAccio: partialTask.nomAccio,
-    centro: partialTask.centro,
+    cp: '',
+    accio: '',
   };
-  // Include uploaded image if provided
-  if (partialTask.logoFile) {
-    task.logoFile = partialTask.logoFile;
-  }
+  
+  // Agregar campos opcionales solo si están definidos
+  if (partialTask.convocatoria !== undefined) task.convocatoria = partialTask.convocatoria;
+  if (partialTask.accio !== undefined) task.accio = partialTask.accio;
+  if (partialTask.cp !== undefined) task.cp = partialTask.cp;
+  if (partialTask.nomAccio !== undefined) task.nomAccio = partialTask.nomAccio;
+  if (partialTask.centro !== undefined) task.centro = partialTask.centro;
+  if (partialTask.logoFile !== undefined) task.logoFile = partialTask.logoFile;
+  if (partialTask.inicio !== undefined) task.inicio = partialTask.inicio; // Añadir la fecha de inicio
+  
   return task;
 };
 
